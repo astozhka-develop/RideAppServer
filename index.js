@@ -1,64 +1,51 @@
+// index.js
 const express = require('express');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
+const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
+
 const app = express();
+app.use(bodyParser.json());
 
-app.use(express.json());
+// 🔑 Секрет для JWT (в реальном проекте вынеси в .env)
+const JWT_SECRET = 'supersecretkey';
 
-// Подключение к Supabase PostgreSQL через переменную окружения
-// В Render в Settings → Environment добавь DATABASE_URL со строкой подключения Supabase
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-// Регистрация
-app.post('/auth/register', async (req, res) => {
-  try {
-    const { name, phone, password, role, telegram_id } = req.body;
-    const hash = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      'INSERT INTO users (name, phone, password_hash, role, telegram_id) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [name, phone, hash, role, telegram_id]
-    );
-    res.json({ ok: true, userId: result.rows[0].id });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Авторизация
-app.post('/auth/login', async (req, res) => {
-  try {
-    const { phone, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
-    if (result.rows.length === 0) return res.status(400).json({ ok: false, error: 'User not found' });
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(400).json({ ok: false, error: 'Wrong password' });
-    res.json({ ok: true, userId: user.id, role: user.role });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Список пользователей для админпанели
-app.get('/admin/users', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT id, name, phone, role, telegram_id FROM users');
-    res.json({ ok: true, users: result.rows });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Проверка здоровья
+// 🚀 Эндпоинт проверки здоровья
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(5000, '0.0.0.0', () => {
-  console.log('Server running on port 5000');
+// 🚀 Регистрация (пока без базы, просто тестовый ответ)
+app.post('/api/auth/register', (req, res) => {
+  const { name, phone, password, role, telegram_id } = req.body;
+
+  if (!name || !phone || !password) {
+    return res.status(400).json({ ok: false, error: 'Missing fields' });
+  }
+
+  // В реальном проекте здесь будет сохранение в базу
+  res.json({ ok: true, userId: 1, name, phone, role, telegram_id });
+});
+
+// 🚀 Авторизация (пока без базы, просто проверка пароля)
+app.post('/api/auth/login', (req, res) => {
+  const { phone, password } = req.body;
+
+  if (!phone || !password) {
+    return res.status(400).json({ ok: false, error: 'Missing fields' });
+  }
+
+  // В реальном проекте здесь будет проверка пользователя в базе
+  if (password !== '123456') {
+    return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+  }
+
+  // Генерация JWT токена
+  const token = jwt.sign({ phone }, JWT_SECRET, { expiresIn: '1h' });
+  res.json({ ok: true, token });
+});
+
+// 🚀 Запуск сервера
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
