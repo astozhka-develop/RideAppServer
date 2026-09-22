@@ -170,7 +170,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
 
-    // Достаем всех водителей со статусом поиска пассажиров, подтягивая их профиль (номер, машину, рейтинг)
+    // Достаем всех водителей со статусом поиска пассажиров, подтягивая их профиль
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
@@ -204,12 +204,12 @@ app.post('/api/bids', async (req, res) => {
 
     // 1. Проверяем, сколько раз этот пассажир уже предлагал цену этому водителю по данной поездке
     const checkAttempts = await pool.query(
-      `SELECT COUNT(*) FROM ride_bids 
+      `SELECT COUNT(*)::int AS count FROM ride_bids 
        WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
       [tripId, decoded.id, driverId]
     );
 
-    const currentAttempts = parseInt(checkAttempts.rows[0].count);
+    const currentAttempts = checkAttempts.rows[0].count;
 
     if (currentAttempts >= 3) {
       return res.json({ 
@@ -238,7 +238,7 @@ app.post('/api/bids', async (req, res) => {
   }
 });
 
-// 🚀 Водитель проверяет входящие предложения от пассажиров (Опрос бэкенда вместо Firebase для MVP)
+// 🚀 Водитель проверяет входящие предложения от пассажиров (Опрос бэкенда)
 app.get('/api/bids/incoming', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
