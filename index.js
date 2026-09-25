@@ -241,3 +241,71 @@ app.post('/api/bids', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
+
+// GET /api/trips/drivers — Поиск попутных водителей для пассажира
+app.get('/api/trips/drivers', async (req, res) => {
+    try {
+        // Пассажир присылает свои координаты через Query-параметры
+        const { startLat, startLon, endLat, endLon } = req.query;
+
+        if (!startLat || !startLon || !endLat || !endLon) {
+            return res.status(400).json({ ok: false, error: 'Пропущені координати пасажира' });
+        }
+
+        const pStartLat = parseFloat(startLat);
+        const pStartLon = parseFloat(startLon);
+        const pEndLat = parseFloat(endLat);
+        const pEndLon = parseFloat(endLon);
+
+        // 1. Вытягиваем всех активных водителей со статусом 'searching' из Supabase
+        const { data: trips, error } = await supabase
+            .from('active_trips')
+            .select(`
+                id, start_lat, start_lon, end_lat, end_lon, start_address, end_address, user_id,
+                users:user_id ( name, phone, car_make, plate_number )
+            `)
+            .eq('role', 'driver')
+            .eq('status', 'searching');
+
+        if (error) throw error;
+
+        const matchingDrivers = [];
+        const MAX_RADIUS_KM = 5.0; // Попутный радиус: 5 километров на старте и финише
+
+        // 2. Фильтруем водителей по радиусу старта и финиша используя нашу SQL функцию (или JS расчет)
+        for (const trip of trips) {
+            // Считаем расстояние между точками А водителя и пасажира
+            const { data: distStart } = await supabase.rpc('calculate_distance', {
+                lat1: pStartLat, lon1: pStartLon, lat2: trip.start_lat, lon2: trip.start_lon
+            });
+
+            // Считаем расстояние между точками Б водителя и пасажира
+            const { data: distEnd } = await supabase.rpc('calculate_distance', {
+                lat1: pEndLat, lon1: pEndLon, lat2: trip.end_lat, lon2: trip.end_lon
+            });
+
+            // Если водитель и стартует близко, и едет примерно туда же — добавляем его в радар!
+            if (distStart <= MAX_RADIUS_KM && distEnd <= MAX_RADIUS_KM) {
+                matchingDrivers.push({
+                    tripId: trip.id,
+                    driverId: trip.user_id,
+                    startLat: trip.start_lat,
+                    startLon: trip.start_lon,
+                    endLat: trip.end_lat,
+                    endLon: trip.end_lon,
+                    startAddress: trip.start_address,
+                    endAddress: trip.end_address,
+                    name: trip.users?.name || 'Водій',
+                    phone: trip.users?.phone || '',
+                    carMake: trip.users?.car_make || 'Авто',
+                    plateNumber: trip.users?.plate_number || 'Б/Н'
+                });
+            }
+        }
+
+        res.json({ ok: true, drivers: matchingDrivers });
+
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
