@@ -171,27 +171,37 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 Создать активный маршрут на карте
+// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН ИНДЕКС СТРОКИ И ДОБАВЛЕНА ПОДСТРАХОВКА АДРЕСОВ
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const token = authHeader.split(' ');
+    
+    const parts = authHeader.split(' ');
+    const token = parts[1];
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
     
+    // Отменяем старые незавершенные поиски этого пользователя, чтобы не плодить дубли в Supabase
     await pool.query(
-      "UPDATE active_trips SET status = 'cancelled' WHERE user_id = $1 AND status = 'searching'",
+      "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
       [decoded.id]
     );
+    
+    // 🔥 ИСПРАВЛЕНО/MVP-ПОДСТРАХОВКА: Если адрес не определился навигатором, пишем понятную заглушку, чтобы база не падала по NOT NULL
+    val finalStartAddress = startAddress || "Точка на карті (Старт)";
+    val finalEndAddress = endAddress || "Точка на карті (Фініш)";
     
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [decoded.id, role, startLat, startLon, endLat, endLon, startAddress, endAddress]
+      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
-    res.json({ ok: true, tripId: result.rows.id });
+    
+    // 🔥 ИСПРАВЛЕНО: Извлекаем id строго из нулевого (первого) элемента массива строк PostgreSQL!
+    res.json({ ok: true, tripId: result.rows[0].id });
+    
   } catch (err) {
     console.error('Trip creation error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
