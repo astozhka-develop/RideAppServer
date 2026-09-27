@@ -28,28 +28,48 @@ app.get('/api/health', (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-// 🚀 Регистрация нового пользователя
-app.post('/api/auth/register', async (req, res) => {
+/app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, phone, role, password } = req.body;
+    const { name, phone, role, password, carMake, plateNumber, carPhotoUrl } = req.body;
     if (!name || !phone || !password || !role) {
       return res.json({ ok: false, error: 'Заповніть всі обов\'язкові поля' });
     }
     
-    const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
+    const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone]);
     if (checkUser.rows.length > 0) {
       return res.json({ ok: false, error: 'Користувач з таким номером телефону вже зареєстрований!' });
     }
     
     const password_hash = await bcrypt.hash(password, 10);
+    
+    // 🔥 Записываем водителя со статусом is_verified = false (ждет админа)
     const result = await pool.query(
-      'INSERT INTO users (name, phone, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-      [name, phone, password_hash, role]
+      `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, car_photo_url, is_verified) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, false) RETURNING id`,
+      [name, phone, password_hash, role, carMake || null, plateNumber || null, carPhotoUrl || null]
     );
     res.json({ ok: true, userId: result.rows[0].id });
   } catch (err) {
     console.error('Registration error:', err.message);
     res.json({ ok: false, error: 'Server error: ' + err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+    
+    const user = result.rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.json({ ok: false, error: 'Невірний пароль' });
+    
+    // 🔥 Передаем флагisAdmin внутрь зашифрованного токена
+    const token = jwt.sign({ id: user.id, role: user.role, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, token, role: user.role, isAdmin: user.is_admin });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
   }
 });
 
