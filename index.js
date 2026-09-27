@@ -336,8 +336,9 @@ app.get('/api/bids/status/passenger', async (req, res) => {
     res.json({ ok: false, error: err.message });
   }
 });// ==========================================
-// 🚀 ЗАПУСК СЕРВЕРА
+// ==========================================
+// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
 // ==========================================
 app.listen(PORT, () => {
-console.log(🚀 Server is running smoothly on port ${PORT});
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
