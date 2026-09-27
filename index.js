@@ -235,6 +235,53 @@ app.post('/api/bids', async (req, res) => {
   }
 });
 
+// 🚀 GET /api/bids/driver/incoming — Водитель запрашивает входящие ставки для своей поездки
+app.get('/api/bids/driver/incoming', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+
+    const { tripId } = req.query; // Получаем ID поездки водителя из Query-параметров
+    if (!tripId) {
+      return res.json({ ok: false, error: 'Пропущений tripId водія' });
+    }
+
+    // Запрашиваем из Supabase все ставки со статусом 'pending' (ожидающие ответа)
+    // Подтягиваем имя пассажира из таблицы users по связи passenger_id
+    const { data: bids, error } = await supabase
+      .from('ride_bids')
+      .select(`
+        id,
+        trip_id,
+        proposed_price,
+        passenger_count,
+        passenger_id,
+        users:passenger_id ( name )
+      `)
+      .eq('driver_id', req.user?.id || req.userId) // Защита: ищем ставки только для авторизованного водителя
+      .eq('status', 'pending');
+
+    if (error) throw error;
+
+    // Маппим данные в формат, который ожидает наше Android-приложение (Котлин data-класс)
+    const formattedBids = bids.map(bid => ({
+      bidId: bid.id,
+      passengerTripId: bid.trip_id,
+      passengerName: bid.users?.name || 'Пасажир Diway',
+      proposedPrice: bid.proposed_price,
+      passengerCount: bid.passenger_count,
+      startAddress: 'Маршрут попутника', // MVP-заглушка адреса, так как координаты совпадают в радиусе 5 км
+      endAddress: ''
+    }));
+
+    res.json({ ok: true, bids: formattedBids });
+
+  } catch (err) {
+    console.error('Incoming bids error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
+  }
+});
+
 // ==========================================
 // 🚀 ЗАПУСК СЕРВЕРА
 // ==========================================
