@@ -171,7 +171,7 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН ИНДЕКС СТРОКИ И ДОБАВЛЕНА ПОДСТРАХОВКА АДРЕСОВ
+// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН СИНТАКСИС JS (const) И ИНДЕКС СТРОКИ
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -183,15 +183,15 @@ app.post('/api/trips', async (req, res) => {
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
     
-    // Отменяем старые незавершенные поиски этого пользователя, чтобы не плодить дубли в Supabase
+    // Отменяем старые незавершенные поиски этого пользователя, чтобы не плодить дубли в базе
     await pool.query(
       "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
       [decoded.id]
     );
     
-    // 🔥 ИСПРАВЛЕНО/MVP-ПОДСТРАХОВКА: Если адрес не определился навигатором, пишем понятную заглушку, чтобы база не падала по NOT NULL
-    val finalStartAddress = startAddress || "Точка на карті (Старт)";
-    val finalEndAddress = endAddress || "Точка на карті (Фініш)";
+    // 🔥 ИСПРАВЛЕНО: Котлиновский 'val' заменен на правильный JS 'const'!
+    const finalStartAddress = startAddress || "Точка на карті (Старт)";
+    const finalEndAddress = endAddress || "Точка на карті (Фініш)";
     
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) 
