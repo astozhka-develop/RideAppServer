@@ -78,12 +78,12 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 🚀 Авторизация (Логин)
+// 🚀 Авторизація (Логін) — ИСПРАВЛЕН ИНДЕКС МАССИВА СТРОК
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password } = req.body;
     if (!phone || !password) {
-      return res.json({ ok: false, error: 'Missing fields' });
+      return res.json({ ok: false, error: 'Заповніть всі поля!' });
     }
     
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
@@ -91,17 +91,26 @@ app.post('/api/auth/login', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    const user = result.rows;
+    // 🔥 ИСПРАВЛЕНО: Берем именно нулевой (первый найденный) объект из массива строк!
+    const user = result.rows[0]; 
+    
+    // Теперь user.password_hash гарантированно содержит текстовый хэш пароля из Supabase
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return res.json({ ok: false, error: 'Невірний пароль' });
     }
     
-    const token = jwt.sign({ id: user.id, role: user.role, isAdmin: user.is_admin || false }, JWT_SECRET, { expiresIn: '7d' });
+    // Генерируем JWT-токен, вшивая флаг админа
+    const token = jwt.sign(
+      { id: user.id, role: user.role, isAdmin: user.is_admin || false }, 
+      JWT_SECRET, 
+      { expiresIn: '7d' }
+    );
+    
     res.json({ ok: true, token, role: user.role, isAdmin: user.is_admin || false });
   } catch (err) {
     console.error('Login error:', err.message);
-    res.json({ ok: false, error: 'Server error: ' + err.message });
+    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
   }
 });
 
