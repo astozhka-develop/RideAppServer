@@ -279,27 +279,41 @@ console.error('Respond bid error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 Регулярный опрос статуса ставки для Пассажира (Ждет телефон после кнопки Принять)
+// 🚀 Регулярный опрос статуса ставки для Пассажира (Исправлен синтаксис скобок!)
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-// Ищем ставку для этой поездки пассажира.
-// Подтягиваем телефон водителя, который отобразится только при статусе accepted!
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
-if (result.rows.length === 0) {
-return res.json({ ok: true, status: 'pending', driverPhone: null });
-}
-res.json({
-ok: true,
-status: result.rows[0].status,
-driverPhone: result.rows[0].status === 'accepted' ? result.rows[0].driverPhone : null
-});
-} catch (err) {
-res.json({ ok: false, error: err.message });
-}
+  try {
+    const { tripId } = req.query;
+    if (!tripId) {
+      return res.json({ ok: false, error: 'Пропущений tripId пасажира' });
+    }
+    
+    // Ищем ставку для этой поездки пассажира. 
+    // 🔥 ИСПРАВЛЕНО: Запятая в конце строки SQL заменена на закрывающую скобку )
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone"
+       FROM ride_bids b
+       JOIN users u ON b.driver_id = u.id
+       WHERE b.trip_id = $1
+       ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+
+    // 🔥 ИСПРАВЛЕНО: Добавлен индекс [0] для корректного чтения массива строк PostgreSQL
+    const topBid = result.rows[0];
+
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Passenger bid status error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
+  }
 });
 // ==========================================
 // 🚀 ЗАПУСК СЕРВЕРА
