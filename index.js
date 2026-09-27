@@ -28,7 +28,7 @@ app.get('/api/health', (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-/app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, carPhotoUrl } = req.body;
     if (!name || !phone || !password || !role) {
