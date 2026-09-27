@@ -244,12 +244,13 @@ app.get('/api/trips/drivers', async (req, res) => {
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
 // ==========================================
 
-// 🚀 Пассажир делает ставку выбранному водителю
+// 🚀 Пасажир робить ставку вибраному водію — ИСПРАВЛЕН ИНДЕКС СТРОКИ COUNT
 app.post('/api/bids', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const token = authHeader.split(' ');
+    const parts = authHeader.split(' ');
+    const token = parts[1];
     const decoded = jwt.verify(token, JWT_SECRET);
     const { tripId, driverId, proposedPrice, passengerCount } = req.body;
     
@@ -258,7 +259,9 @@ app.post('/api/bids', async (req, res) => {
        WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
       [tripId, decoded.id, driverId]
     );
-    const currentAttempts = checkAttempts.rows.count;
+    
+    // 🔥 ИСПРАВЛЕНО: Извлекаем count из первой строки [0] массива результатов!
+    const currentAttempts = checkAttempts.rows[0].count;
     if (currentAttempts >= 3) {
       return res.json({ 
         ok: false, 
@@ -272,12 +275,13 @@ app.post('/api/bids', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
       [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
     );
-    res.json({ ok: true, bidId: result.rows.id, attempt: nextAttemptNumber });
+    res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
   } catch (err) {
     console.error('Bid creation error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
   }
 });
+
 
 // 🚀 Водитель запрашивает входящие ставки для своей поездки (Исправлен синтаксис скобок!)
 app.get('/api/bids/driver/incoming', async (req, res) => {
