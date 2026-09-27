@@ -282,6 +282,31 @@ app.get('/api/bids/driver/incoming', async (req, res) => {
   }
 });
 
+// 🚀 POST /api/bids/respond — Водитель принимает или отклоняет ставку
+app.post('/api/bids/respond', async (req, res) => {
+  try {
+    const { bidId, status } = req.body; // 'accepted' или 'rejected'
+
+    if (!bidId || !status) {
+      return res.json({ ok: false, error: 'Неповні дані запиту' });
+    }
+
+    // Обновляем статус торга в таблице ride_bids в Supabase
+    const { data, error } = await supabase
+      .from('ride_bids')
+      .update({ status: status })
+      .eq('id', bidId)
+      .select();
+
+    if (error) throw error;
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+
 // ==========================================
 // 🚀 ЗАПУСК СЕРВЕРА
 // ==========================================
