@@ -114,17 +114,20 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Получение данных профиля
+// 🚀 Отримання даних профілю (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const token = authHeader.split(' ');
+    const parts = authHeader.split(' ');
+    // 🔥 ИСПРАВЛЕНО: Берем именно первый индекс массива — саму JWT строку!
+    const token = parts[1]; 
+    
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const result = await pool.query(
-      'SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber" FROM users WHERE id = $1',
+      'SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", car_photo_url AS "carPhotoUrl" FROM users WHERE id = $1',
       [decoded.id]
     );
     
@@ -132,20 +135,23 @@ app.get('/api/profile', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    res.json({ ok: true, user: result.rows });
+    res.json({ ok: true, user: result.rows[0] });
   } catch (err) {
     console.error('Profile GET error:', err.message);
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
 
-// 🚀 Обновление данных профиля водителя
+// 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
 app.put('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const token = authHeader.split(' ');
+    const parts = authHeader.split(' ');
+    // 🔥 ИСПРАВЛЕНО: Берем именно первый индекс массива — саму JWT строку!
+    const token = parts[1]; 
+    
     const decoded = jwt.verify(token, JWT_SECRET);
     const { name, phone, carMake, plateNumber, carPhotoUrl } = req.body;
     
