@@ -24,10 +24,33 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+// 🔥 ДОБАВЛЕНО: Настройка Multer для приема изображений авто
+const multer = require('multer');
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб на одну фотографию
+  storage: multer.memoryStorage()
+});
+
+// 🚀 POST /api/upload/car-photo — Загрузка фотографии автомобиля
+app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.json({ ok: false, error: 'Файл не завантажено' });
+    }
+    // Переводим картинку в формат Base64 для MVP хранения прямо в Supabase
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    res.json({ ok: true, carPhotoUrl: base64Image });
+  } catch (err) {
+    console.error('Upload error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера при завантаженні фото: ' + err.message });
+  }
+});
+
 // ==========================================
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
+// 🚀 Регистрация нового пользователя
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, carPhotoUrl } = req.body;
@@ -35,41 +58,23 @@ app.post('/api/auth/register', async (req, res) => {
       return res.json({ ok: false, error: 'Заповніть всі обов\'язкові поля' });
     }
     
-    const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone]);
+    const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
     if (checkUser.rows.length > 0) {
       return res.json({ ok: false, error: 'Користувач з таким номером телефону вже зареєстрований!' });
     }
     
     const password_hash = await bcrypt.hash(password, 10);
     
-    // 🔥 Записываем водителя со статусом is_verified = false (ждет админа)
+    // Записываем пользователя со всеми новыми MVP-полями под фото и госномер!
     const result = await pool.query(
       `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, car_photo_url, is_verified) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, false) RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
       [name, phone, password_hash, role, carMake || null, plateNumber || null, carPhotoUrl || null]
     );
-    res.json({ ok: true, userId: result.rows[0].id });
+    res.json({ ok: true, userId: result.rows.id });
   } catch (err) {
     console.error('Registration error:', err.message);
     res.json({ ok: false, error: 'Server error: ' + err.message });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { phone, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
-    
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.json({ ok: false, error: 'Невірний пароль' });
-    
-    // 🔥 Передаем флагisAdmin внутрь зашифрованного токена
-    const token = jwt.sign({ id: user.id, role: user.role, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, token, role: user.role, isAdmin: user.is_admin });
-  } catch (err) {
-    res.json({ ok: false, error: err.message });
   }
 });
 
@@ -86,14 +91,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    const user = result.rows[0];
+    const user = result.rows;
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return res.json({ ok: false, error: 'Невірний пароль' });
     }
     
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, token, role: user.role });
+    const token = jwt.sign({ id: user.id, role: user.role, isAdmin: user.is_admin || false }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, token, role: user.role, isAdmin: user.is_admin || false });
   } catch (err) {
     console.error('Login error:', err.message);
     res.json({ ok: false, error: 'Server error: ' + err.message });
@@ -106,7 +111,7 @@ app.get('/api/profile', async (req, res) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ');
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const result = await pool.query(
@@ -118,7 +123,7 @@ app.get('/api/profile', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    res.json({ ok: true, user: result.rows[0] });
+    res.json({ ok: true, user: result.rows });
   } catch (err) {
     console.error('Profile GET error:', err.message);
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
@@ -131,13 +136,13 @@ app.put('/api/profile', async (req, res) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ');
     const decoded = jwt.verify(token, JWT_SECRET);
-    const { name, phone, carMake, plateNumber } = req.body;
+    const { name, phone, carMake, plateNumber, carPhotoUrl } = req.body;
     
     await pool.query(
-      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4 WHERE id=$5',
-      [name, phone, carMake, plateNumber, decoded.id]
+      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4, car_photo_url=$5 WHERE id=$6',
+      [name, phone, carMake, plateNumber, carPhotoUrl || null, decoded.id]
     );
     
     res.json({ ok: true });
@@ -156,7 +161,7 @@ app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ');
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
@@ -171,14 +176,14 @@ app.post('/api/trips', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, startAddress, endAddress]
     );
-    res.json({ ok: true, tripId: result.rows[0].id });
+    res.json({ ok: true, tripId: result.rows.id });
   } catch (err) {
     console.error('Trip creation error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
   }
 });
 
-// 🚀 Поиск попутных водителей для пассажира (С использованием SQL-расчета по радиусу 5 км)
+// 🚀 Поиск попутных водителей для пассажира
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const { startLat, startLon, endLat, endLon } = req.query;
@@ -191,11 +196,10 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pEndLat = parseFloat(endLat);
     const pEndLon = parseFloat(endLon);
 
-    // Подтягиваем водителей из пула, на лету выполняя расчет расстояния встроенной функцией calculate_distance
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
-              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
+              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.car_photo_url AS "carPhotoUrl"
        FROM active_trips t
        JOIN users u ON t.user_id = u.id
        WHERE t.role = 'driver' AND t.status = 'searching'
@@ -215,12 +219,12 @@ app.get('/api/trips/drivers', async (req, res) => {
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
 // ==========================================
 
-// 🚀 Пассажир делает ставку выбранному водителю (с лимитом в 3 попытки!)
+// 🚀 Пассажир делает ставку выбранному водителю
 app.post('/api/bids', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ');
     const decoded = jwt.verify(token, JWT_SECRET);
     const { tripId, driverId, proposedPrice, passengerCount } = req.body;
     
@@ -229,7 +233,7 @@ app.post('/api/bids', async (req, res) => {
        WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
       [tripId, decoded.id, driverId]
     );
-    const currentAttempts = checkAttempts.rows[0].count;
+    const currentAttempts = checkAttempts.rows.count;
     if (currentAttempts >= 3) {
       return res.json({ 
         ok: false, 
@@ -243,7 +247,7 @@ app.post('/api/bids', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
       [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
     );
-    res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+    res.json({ ok: true, bidId: result.rows.id, attempt: nextAttemptNumber });
   } catch (err) {
     console.error('Bid creation error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
@@ -253,42 +257,32 @@ app.post('/api/bids', async (req, res) => {
 // 🚀 Водитель запрашивает входящие ставки для своей поездки
 app.get('/api/bids/driver/incoming', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET); // Декодируем ID водителя из токена безопасности
-
-    const { tripId } = req.query; 
-    if (!tripId) {
-      return res.json({ ok: false, error: 'Пропущений tripId водія' });
-    }
-
-    // ИСПРАВЛЕНО: Переведено на чистый pool.query с джоином имени пассажира
-    const result = await pool.query(
-      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", 
-              b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress"
-       FROM ride_bids b
-       JOIN users u ON b.passenger_id = u.id
-       JOIN active_trips t ON b.trip_id = t.id
-       WHERE b.driver_id = $1 AND b.status = 'pending'`,
-      [decoded.id]
-    );
-
-    res.json({ ok: true, bids: result.rows });
-  } catch (err) {
-    console.error('Incoming bids error:', err.message);
+const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+const token = authHeader.split(' ');
+const decoded = jwt.verify(token, JWT_SECRET);
+const { tripId } = req.query;
+if (!tripId) {
+return res.json({ ok: false, error: 'Пропущений tripId водія' });
+}
+const result = await pool.query(
+SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending'
+,
+[decoded.id]
+);
+res.json({ ok: true, bids: result.rows });
+} catch (err) {
+console.error('Incoming bids error:', err.message);
 res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
 }
 });
 // 🚀 Водитель принимает или отклоняет ставку
 app.post('/api/bids/respond', async (req, res) => {
 try {
-const { bidId, status } = req.body; // 'accepted' или 'rejected'
+const { bidId, status } = req.body;
 if (!bidId || !status) {
 return res.json({ ok: false, error: 'Неповні дані запиту' });
 }
-// ИСПРАВЛЕНО: Обновляем статус через pool.query
 await pool.query(
 "UPDATE ride_bids SET status = $1 WHERE id = $2",
 [status, bidId]
@@ -299,46 +293,34 @@ console.error('Respond bid error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 Регулярный опрос статуса ставки для Пассажира (Исправлен синтаксис скобок!)
+// 🚀 Регулярный опрос статуса ставки для Пассажира
 app.get('/api/bids/status/passenger', async (req, res) => {
-  try {
-    const { tripId } = req.query;
-    if (!tripId) {
-      return res.json({ ok: false, error: 'Пропущений tripId пасажира' });
-    }
-    
-    // Ищем ставку для этой поездки пассажира. 
-    // 🔥 ИСПРАВЛЕНО: Запятая в конце строки SQL заменена на закрывающую скобку )
-    const result = await pool.query(
-      `SELECT b.status, u.phone AS "driverPhone"
-       FROM ride_bids b
-       JOIN users u ON b.driver_id = u.id
-       WHERE b.trip_id = $1
-       ORDER BY b.id DESC LIMIT 1`,
-      [tripId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ ok: true, status: 'pending', driverPhone: null });
-    }
-
-    // 🔥 ИСПРАВЛЕНО: Добавлен индекс [0] для корректного чтения массива строк PostgreSQL
-    const topBid = result.rows[0];
-
-    res.json({ 
-      ok: true, 
-      status: topBid.status, 
-      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
-    });
-  } catch (err) {
-    console.error('Passenger bid status error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
-  }
+try {
+const { tripId } = req.query;
+if (!tripId) {
+return res.json({ ok: false, error: 'Пропущений tripId' });
+}
+const result = await pool.query(
+SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
+[tripId]
+);
+if (result.rows.length === 0) {
+return res.json({ ok: true, status: 'pending', driverPhone: null });
+}
+const topBid = result.rows[0];
+res.json({
+ok: true,
+status: topBid.status,
+driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+});
+} catch (err) {
+console.error('Status error:', err.message);
+res.json({ ok: false, error: err.message });
+}
 });
 // ==========================================
-// 🚀 ЗАПУСКАЕМ СЕРВЕР (С КОСЫМИ КАВЫЧКАМИ!)
+// 🚀 ЗАПУСК СЕРВЕРА
 // ==========================================
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running smoothly on port ${PORT}`);
+console.log(🚀 Server is running smoothly on port ${PORT});
 });
-
