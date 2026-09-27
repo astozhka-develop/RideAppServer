@@ -316,8 +316,9 @@ app.get('/api/bids/status/passenger', async (req, res) => {
   }
 });
 // ==========================================
-// 🚀 ЗАПУСК СЕРВЕРА
+// 🚀 ЗАПУСКАЕМ СЕРВЕР (С КОСЫМИ КАВЫЧКАМИ!)
 // ==========================================
 app.listen(PORT, () => {
-console.log(🚀 Server is running smoothly on port ${PORT});
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
+
