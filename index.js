@@ -294,36 +294,43 @@ console.error('Respond bid error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 Регулярный опрос статуса ставки для Пассажира
+// 🚀 Регулярный опрос статуса ставки для Пассажира (Синтаксис скобок исправлен на 100%)
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-if (!tripId) {
-return res.json({ ok: false, error: 'Пропущений tripId' });
-}
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
-if (result.rows.length === 0) {
-return res.json({ ok: true, status: 'pending', driverPhone: null });
-}
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
-});
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+  try {
+    const { tripId } = req.query;
+    if (!tripId) {
+      return res.json({ ok: false, error: 'Пропущений tripId' });
+    }
+    
+    // 🔥 ИСПРАВЛЕНО: Закрывающая скобка ) возвращена на место после косой кавычки `
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone"
+       FROM ride_bids b
+       JOIN users u ON b.driver_id = u.id
+       WHERE b.trip_id = $1
+       ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+
+    const topBid = result.rows[0];
+
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
+});// ==========================================
 // ==========================================
-// 🚀 ЗАПУСКАЕМ СЕРВЕР
+// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
 // ==========================================
 app.listen(PORT, () => {
-console.log(🚀 Server is running smoothly on port ${PORT});
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
-
-
