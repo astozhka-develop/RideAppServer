@@ -24,28 +24,6 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔥 ДОБАВЛЕНО: Настройка Multer для приема изображений авто
-const multer = require('multer');
-const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб на одну фотографию
-  storage: multer.memoryStorage()
-});
-
-// 🚀 POST /api/upload/car-photo — Загрузка фотографии автомобиля
-app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.json({ ok: false, error: 'Файл не завантажено' });
-    }
-    // Переводим картинку в формат Base64 для MVP хранения прямо в Supabase
-    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    res.json({ ok: true, carPhotoUrl: base64Image });
-  } catch (err) {
-    console.error('Upload error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера при завантаженні фото: ' + err.message });
-  }
-});
-
 // ==========================================
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
@@ -153,11 +131,11 @@ app.put('/api/profile', async (req, res) => {
     const token = parts[1]; 
     
     const decoded = jwt.verify(token, JWT_SECRET);
-    const { name, phone, carMake, plateNumber, carPhotoUrl } = req.body;
+    const { name, phone, carMake, plateNumber } = req.body;
     
     await pool.query(
-      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4, car_photo_url=$5 WHERE id=$6',
-      [name, phone, carMake, plateNumber, carPhotoUrl || null, decoded.id]
+      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4, WHERE id=$5',
+      [name, phone, carMake, plateNumber, decoded.id]
     );
     
     res.json({ ok: true });
