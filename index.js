@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bcrypt = require('bcryptjs'); 
 const { Pool } = require('pg');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
@@ -39,25 +40,19 @@ app.get('/admin', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Панель Адміністратора Diway</title>
-    <link href="https://googleapis.com" rel="stylesheet">
+    <title>Панель Admin Diway</title>
     <style>
-        body { font-family: 'Montserrat', sans-serif; background-color: #F4F6F9; margin: 0; padding: 0; color: #212121; }
+        body { font-family: sans-serif; background-color: #F4F6F9; margin: 0; padding: 0; color: #212121; }
         .auth-container, .dashboard-container { max-width: 500px; margin: 80px auto; background: #FFFFFF; padding: 40px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
         .dashboard-container { max-width: 800px; margin: 40px auto; display: none; }
-        h2 { text-align: center; margin-bottom: 24px; font-weight: 700; color: #0D47A1; }
+        h2 { text-align: center; margin-bottom: 24px; color: #0D47A1; }
         .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #757575; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 14px; color: #757575; }
         input { width: 100%; height: 54px; padding: 0 16px; border: 1.5px solid #E0E0E0; border-radius: 12px; font-size: 16px; box-sizing: border-box; }
-        input:focus { border-color: #0D47A1; outline: none; }
-        button { width: 100%; height: 56px; background-color: #0D47A1; color: #FFFFFF; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
-        button:hover { background-color: #0b3c8f; }
+        button { width: 100%; height: 56px; background-color: #0D47A1; color: #FFFFFF; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; }
         .driver-card { background: #FFFFFF; border: 1.5px solid #E0E0E0; border-radius: 16px; padding: 20px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-        .driver-info h3 { margin: 0 0 6px 0; font-size: 18px; }
-        .driver-info p { margin: 4px 0; color: #757575; font-size: 14px; }
-        .badge { display: inline-block; padding: 4px 12px; background: #E3F2FD; color: #0D47A1; border-radius: 8px; font-weight: 700; font-size: 12px; }
+        .badge { display: inline-block; padding: 4px 12px; background: #E3F2FD; color: #0D47A1; border-radius: 8px; font-weight: bold; font-size: 12px; }
         .btn-approve { background-color: #10B981; width: auto; padding: 0 20px; height: 44px; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;}
-        .btn-approve:hover { background-color: #0d966b; }
         .no-data { text-align: center; color: #757575; font-style: italic; margin-top: 40px; }
     </style>
 </head>
@@ -70,7 +65,7 @@ app.get('/admin', (req, res) => {
         </div>
         <div class="form-group">
             <label>Код безпеки (2FA)</label>
-            <input type="text" id="adminCode" placeholder="777999" maxlength="6" style="text-align: center; letter-spacing: 4px; font-weight: bold;">
+            <input type="text" id="adminCode" placeholder="777999" maxlength="6" style="text-align: center; font-weight: bold;">
         </div>
         <button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button>
     </div>
@@ -113,19 +108,10 @@ app.get('/admin', (req, res) => {
                     data.drivers.forEach(driver => {
                         const card = document.createElement('div');
                         card.className = 'driver-card';
-                        card.innerHTML = \`
-                            <div class="driver-info">
-                                <h3>\${driver.name}</h3>
-                                <p>Тел: \${driver.phone}</p>
-                                <p><span class="badge">\${driver.carMake || 'Авто'} (\${driver.plateNumber || 'Б/Н'})</span></p>
-                            </div>
-                            <div class="actions">
-                                <button class="btn-approve" onclick="verifyDriver(\${driver.id})">ВЕРИФІКУВАТИ</button>
-                            </div>
-                        \`;
+                        card.innerHTML = '<div class="driver-info"><h3>' + driver.name + '</h3><p>Тел: ' + driver.phone + '</p><p><span class="badge">' + (driver.carMake || 'Авто') + ' (' + (driver.plateNumber || 'Б/Н') + ')</span></p></div><div class="actions"><button class="btn-approve" onclick="verifyDriver(' + driver.id + ')">ВЕРИФІКУВАТИ</button></div>';
                         listDiv.appendChild(card);
                     });
-                } else { listDiv.innerHTML = '<div class="no-data">Немає нових заявок. Всі водії перевірені!</div>'; }
+                } else { listDiv.innerHTML = '<div class="no-data">Немає нових заявок. Все перевірено!</div>'; }
             } catch (err) { document.getElementById('driversList').innerHTML = '<div class="no-data">Помилка завантаження</div>'; }
         }
         async function verifyDriver(driverId) {
@@ -200,28 +186,31 @@ app.get('/api/profile', async (req, res) => {
     );
     res.json({ ok: true, user: result.rows[0] });
   } catch (err) {
-res.json({ ok: false, error: err.message });
-}
+    res.json({ ok: false, error: err.message });
+  }
 });
+
 app.put('/api/profile', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
-const token = authHeader.split(' ')[1];
-const decoded = jwt.verify(token, JWT_SECRET);
-const { name, phone, carMake, plateNumber } = req.body;
-await pool.query(
-'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4 WHERE id=$5',
-[name, phone, carMake, plateNumber, decoded.id]
-);
-res.json({ ok: true });
-} catch (err) {
-res.json({ ok: false, error: err.message });
-}
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { name, phone, carMake, plateNumber } = req.body;
+    
+    await pool.query(
+      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4 WHERE id=$5',
+      [name, phone, carMake, plateNumber, decoded.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
+
 // Админ логин на странице
 app.post('/api/admin/login', async (req, res) => {
-try {
+  try {
 const { phone, code } = req.body;
 if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
 const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
@@ -272,7 +261,7 @@ await pool.query(
 const constStartAddress = startAddress || "Точка на карті (Старт)";
 const constEndAddress = endAddress || "Точка на карті (Фініш)";
 const result = await pool.query(
-INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address)  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
+INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
 [decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
 );
 res.json({ ok: true, tripId: result.rows[0].id });
@@ -292,7 +281,7 @@ const pStartLon = parseFloat(startLon);
 const pEndLat = parseFloat(endLat);
 const pEndLon = parseFloat(endLon);
 const result = await pool.query(
-SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon",  t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.car_photo_url AS "carPhotoUrl" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
+SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
 [pStartLat, pStartLon, pEndLat, pEndLon]
 );
 res.json({ ok: true, drivers: result.rows });
@@ -345,7 +334,7 @@ if (!tripId) {
 return res.json({ ok: false, error: 'Пропущений tripId водія' });
 }
 const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice",  b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
+SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
 [decoded.id]
 );
 res.json({ ok: true, bids: result.rows });
