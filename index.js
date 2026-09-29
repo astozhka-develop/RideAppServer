@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bcrypt = require('bcryptjs'); 
 const { Pool } = require('pg');
-const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
@@ -160,7 +159,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!phone || !password) return res.json({ ok: false, error: 'Заповніть всі поля!' });
     
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знадено' });
     
     const user = result.rows[0]; 
     const match = await bcrypt.compare(password, user.password_hash);
@@ -220,14 +219,14 @@ const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET
 res.json({ ok: true, token });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
-// Админ: Получить невыверенных водителей
+// 🔥 ИСПРАВЛЕНО: Кавычки внутри SQL-запроса изменены на шаблонные косые апострофы, исключая сбои!
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
 if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
-const result = await pool.query("SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber" FROM users WHERE role='driver' AND is_verified=false ORDER BY id DESC");
+const result = await pool.query(SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber"  FROM users  WHERE role='driver' AND is_verified=false  ORDER BY id DESC);
 res.json({ ok: true, drivers: result.rows });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
@@ -261,7 +260,7 @@ await pool.query(
 const constStartAddress = startAddress || "Точка на карті (Старт)";
 const constEndAddress = endAddress || "Точка на карті (Фініш)";
 const result = await pool.query(
-INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
+INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address)  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
 [decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
 );
 res.json({ ok: true, tripId: result.rows[0].id });
@@ -281,7 +280,7 @@ const pStartLon = parseFloat(startLon);
 const pEndLat = parseFloat(endLat);
 const pEndLon = parseFloat(endLon);
 const result = await pool.query(
-SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
+SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon",  t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
 [pStartLat, pStartLon, pEndLat, pEndLon]
 );
 res.json({ ok: true, drivers: result.rows });
@@ -334,7 +333,7 @@ if (!tripId) {
 return res.json({ ok: false, error: 'Пропущений tripId водія' });
 }
 const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
+SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice",  b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
 [decoded.id]
 );
 res.json({ ok: true, bids: result.rows });
