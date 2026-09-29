@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bcrypt = require('bcryptjs'); 
 const { Pool } = require('pg');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
@@ -147,7 +148,7 @@ app.post('/api/auth/register', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
       [name, phone, password_hash, role, carMake || null, plateNumber || null, carPhotoUrl || null]
     );
-    res.json({ ok: true, userId: result.rows[0].id });
+    res.json({ ok: true, userId: result.rows.id });
   } catch (err) {
     res.json({ ok: false, error: err.message });
   }
@@ -159,7 +160,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!phone || !password) return res.json({ ok: false, error: 'Заповніть всі поля!' });
     
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знадено' });
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     
     const user = result.rows[0]; 
     const match = await bcrypt.compare(password, user.password_hash);
@@ -180,7 +181,9 @@ app.get('/api/profile', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const result = await pool.query(
-      'SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", created_at AS "createdAt", subscription_expires_at AS "subscriptionExpiresAt" FROM users WHERE id = $1',
+      `SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", 
+              created_at AS "createdAt", subscription_expires_at AS "subscriptionExpiresAt" 
+       FROM users WHERE id = $1`,
       [decoded.id]
     );
     res.json({ ok: true, user: result.rows[0] });
@@ -209,7 +212,7 @@ app.put('/api/profile', async (req, res) => {
 
 // Админ логин на странице
 app.post('/api/admin/login', async (req, res) => {
-  try {
+try {
 const { phone, code } = req.body;
 if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
 const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
@@ -219,7 +222,7 @@ const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET
 res.json({ ok: true, token });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
-// 🔥 ИСПРАВЛЕНО: Кавычки внутри SQL-запроса изменены на шаблонные косые апострофы, исключая сбои!
+// Админ: Получить невыверенных водителей (КАВЫЧКИ SQL ПОЛНОСТЬЮ ИСПРАВЛЕНЫ)
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
