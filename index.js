@@ -11,7 +11,7 @@ app.use(bodyParser.json());
 app.use(cors());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
 // Настройка пула подключений к Supabase (PostgreSQL)
 const pool = new Pool({
@@ -56,7 +56,7 @@ app.get('/admin', (req, res) => {
         .driver-info h3 { margin: 0 0 6px 0; font-size: 18px; }
         .driver-info p { margin: 4px 0; color: #757575; font-size: 14px; }
         .badge { display: inline-block; padding: 4px 12px; background: #E3F2FD; color: #0D47A1; border-radius: 8px; font-weight: 700; font-size: 12px; }
-        .btn-approve { background-color: #10B981; width: auto; padding: 0 20px; height: 44px; }
+        .btn-approve { background-color: #10B981; width: auto; padding: 0 20px; height: 44px; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;}
         .btn-approve:hover { background-color: #0d966b; }
         .no-data { text-align: center; color: #757575; font-style: italic; margin-top: 40px; }
     </style>
@@ -74,14 +74,12 @@ app.get('/admin', (req, res) => {
         </div>
         <button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button>
     </div>
-
     <div class="dashboard-container" id="dashboardBlock">
         <h2>Панель Модерації Водіїв</h2>
         <div id="driversList">
             <div class="no-data">Завантаження заявок...</div>
         </div>
     </div>
-
     <script>
         let adminToken = '';
         async function loginAdmin() {
@@ -103,7 +101,6 @@ app.get('/admin', (req, res) => {
                 } else { alert('Відмовлено: ' + data.error); }
             } catch (err) { alert('Помилка мережі при вході'); }
         }
-
         async function loadUnverifiedDrivers() {
             try {
                 const response = await fetch('/api/admin/unverified-drivers', {
@@ -131,7 +128,6 @@ app.get('/admin', (req, res) => {
                 } else { listDiv.innerHTML = '<div class="no-data">Немає нових заявок. Всі водії перевірені!</div>'; }
             } catch (err) { document.getElementById('driversList').innerHTML = '<div class="no-data">Помилка завантаження</div>'; }
         }
-
         async function verifyDriver(driverId) {
             try {
                 const response = await fetch('/api/admin/verify-driver', {
@@ -152,7 +148,6 @@ app.get('/admin', (req, res) => {
 // ==========================================
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
-
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, carPhotoUrl } = req.body;
@@ -200,18 +195,17 @@ app.get('/api/profile', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const result = await pool.query(
-      'SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber" FROM users WHERE id = $1',
+      'SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", created_at AS "createdAt", subscription_expires_at AS "subscriptionExpiresAt" FROM users WHERE id = $1',
       [decoded.id]
     );
     res.json({ ok: true, user: result.rows[0] });
   } catch (err) {
-    res.json({ ok: false, error: err.message });
-  }
+res.json({ ok: false, error: err.message });
+}
 });
-
 app.put('/api/profile', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
+try {
+const authHeader = req.headers['authorization'];
 if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
@@ -244,7 +238,7 @@ const authHeader = req.headers['authorization'];
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
 if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
-const result = await pool.query("SELECT id, name, phone, car_make AS 'carMake', plate_number AS 'plateNumber' FROM users WHERE role='driver' AND is_verified=false ORDER BY id DESC");
+const result = await pool.query("SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber" FROM users WHERE role='driver' AND is_verified=false ORDER BY id DESC");
 res.json({ ok: true, drivers: result.rows });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
@@ -263,93 +257,142 @@ res.json({ ok: true });
 // ==========================================
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
-// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН СИНТАКСИС СКОБОК SQL
 app.post('/api/trips', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
-    const parts = authHeader.split(' ');
-    const token = parts[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
-    
-    await pool.query("UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'", [decoded.id]);
-    
-    const constStartAddress = startAddress || "Точка на карті (Старт)";
-    const constEndAddress = endAddress || "Точка на карті (Фініш)";
-    
-    // 🔥 ИСПРАВЛЕНО: Запятая после RETURNING id заменена на закрывающую круглую скобку ) перед массивом аргументов!
-    const result = await pool.query(
-      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
-    );
-    
-    res.json({ ok: true, tripId: result.rows[0].id });
-  } catch (err) { 
-    console.error('Trip creation error:', err.message);
-    res.json({ ok: false, error: err.message }); 
-  }
+try {
+const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+const parts = authHeader.split(' ');
+const token = parts[1];
+const decoded = jwt.verify(token, JWT_SECRET);
+const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+await pool.query(
+"UPDATE active_trips SET status = 'cancelled' WHERE user_id = $1 AND status = 'searching'",
+[decoded.id]
+);
+const constStartAddress = startAddress || "Точка на карті (Старт)";
+const constEndAddress = endAddress || "Точка на карті (Фініш)";
+const result = await pool.query(
+INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address)  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
+[decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
+);
+res.json({ ok: true, tripId: result.rows[0].id });
+} catch (err) {
+console.error('Trip creation error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
+}
 });
-
 app.get('/api/trips/drivers', async (req, res) => {
 try {
 const { startLat, startLon, endLat, endLon } = req.query;
+if (!startLat || !startLon || !endLat || !endLon) {
+return res.json({ ok: false, error: 'Пропущені координати пасажира' });
+}
+const pStartLat = parseFloat(startLat);
+const pStartLon = parseFloat(startLon);
+const pEndLat = parseFloat(endLat);
+const pEndLon = parseFloat(endLon);
 const result = await pool.query(
-SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon",  t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
-[parseFloat(startLat), parseFloat(startLon), parseFloat(endLat), parseFloat(endLon)]
+SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon",  t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.car_photo_url AS "carPhotoUrl" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0 AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0,
+[pStartLat, pStartLon, pEndLat, pEndLon]
 );
 res.json({ ok: true, drivers: result.rows });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+} catch (err) {
+console.error('Get drivers error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
+}
 });
 // ==========================================
-// 💰 БЛОК СТАВОК (ТОРГИ)
+// 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
 // ==========================================
 app.post('/api/bids', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
-const token = authHeader.split(' ')[1];
+if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+const parts = authHeader.split(' ');
+const token = parts[1];
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-const checkAttempts = await pool.query("SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3", [tripId, decoded.id, driverId]);
+const checkAttempts = await pool.query(
+"SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3",
+[tripId, decoded.id, driverId]
+);
 const currentAttempts = checkAttempts.rows[0].count;
-if (currentAttempts >= 3) return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок!' });
+if (currentAttempts >= 3) {
+return res.json({
+ok: false,
+error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!'
+});
+}
+const nextAttemptNumber = currentAttempts + 1;
 const result = await pool.query(
 INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
-[tripId, decoded.id, driverId, proposedPrice, passengerCount, currentAttempts + 1]
+[tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
 );
-res.json({ ok: true, bidId: result.rows[0].id, attempt: currentAttempts + 1 });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+} catch (err) {
+console.error('Bid creation error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
+}
 });
 app.get('/api/bids/driver/incoming', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId } = req.query;
+if (!tripId) {
+return res.json({ ok: false, error: 'Пропущений tripId водія' });
+}
 const result = await pool.query(
 SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice",  b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
 [decoded.id]
 );
 res.json({ ok: true, bids: result.rows });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+} catch (err) {
+console.error('Incoming bids error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
+}
 });
 app.post('/api/bids/respond', async (req, res) => {
 try {
 const { bidId, status } = req.body;
-await pool.query("UPDATE ride_bids SET status = $1 WHERE id = $2", [status, bidId]);
+if (!bidId || !status) {
+return res.json({ ok: false, error: 'Неповні дані запиту' });
+}
+await pool.query(
+"UPDATE ride_bids SET status = $1 WHERE id = $2",
+[status, bidId]
+);
 res.json({ ok: true });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+} catch (err) {
+console.error('Respond bid error:', err.message);
+res.json({ ok: false, error: err.message });
+}
 });
 app.get('/api/bids/status/passenger', async (req, res) => {
 try {
 const { tripId } = req.query;
-const result = await pool.query("SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1", [tripId]);
-if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-res.json({ ok: true, status: result.rows[0].status, driverPhone: result.rows[0].status === 'accepted' ? result.rows[0].driverPhone : null });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+if (!tripId) {
+return res.json({ ok: false, error: 'Пропущений tripId' });
+}
+const result = await pool.query(
+SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
+[tripId]
+);
+if (result.rows.length === 0) {
+return res.json({ ok: true, status: 'pending', driverPhone: null });
+}
+const topBid = result.rows[0];
+res.json({
+ok: true,
+status: topBid.status,
+driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+});
+} catch (err) {
+console.error('Status error:', err.message);
+res.json({ ok: false, error: err.message });
+}
 });
 app.listen(PORT, () => {
 console.log(🚀 Server is running smoothly on port ${PORT});
