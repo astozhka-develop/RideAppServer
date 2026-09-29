@@ -263,22 +263,37 @@ res.json({ ok: true });
 // ==========================================
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
+// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН СИНТАКСИС СКОБОК SQL
 app.post('/api/trips', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-const token = authHeader.split(' ')[1];
-const decoded = jwt.verify(token, JWT_SECRET);
-const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
-await pool.query("UPDATE active_trips SET status = 'cancelled' WHERE user_id = $1 AND status = 'searching'", [decoded.id]);
-const constStartAddress = startAddress || "Точка на карті (Старт)";
-const constEndAddress = endAddress || "Точка на карті (Фініш)";
-const result = await pool.query(
-INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address)  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id,
-[decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
-);
-res.json({ ok: true, tripId: result.rows[0].id });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    
+    const parts = authHeader.split(' ');
+    const token = parts[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+    
+    await pool.query("UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'", [decoded.id]);
+    
+    const constStartAddress = startAddress || "Точка на карті (Старт)";
+    const constEndAddress = endAddress || "Точка на карті (Фініш)";
+    
+    // 🔥 ИСПРАВЛЕНО: Запятая после RETURNING id заменена на закрывающую круглую скобку ) перед массивом аргументов!
+    const result = await pool.query(
+      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [decoded.id, role, startLat, startLon, endLat, endLon, constStartAddress, constEndAddress]
+    );
+    
+    res.json({ ok: true, tripId: result.rows[0].id });
+  } catch (err) { 
+    console.error('Trip creation error:', err.message);
+    res.json({ ok: false, error: err.message }); 
+  }
 });
+
 app.get('/api/trips/drivers', async (req, res) => {
 try {
 const { startLat, startLon, endLat, endLon } = req.query;
