@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bcrypt = require('bcryptjs'); 
 const { Pool } = require('pg');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
@@ -327,7 +328,94 @@ app.get('/api/bids/status/passenger', async (req, res) => {
     console.error('Status error:', err.message);
     res.json({ ok: false, error: err.message });
   }
-});// ==========================================
+});
+
+// ==========================================
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (WEB DASHBOARD)
+// ==========================================
+
+// 🚀 1. Отдаем файл admin.html при заходе на URL /admin в браузере
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+// 🚀 2. Логин админа на веб-странице по мастер-коду 777999
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
+
+    // Проверяем 2FA мастер-код безопасности
+    if (code !== '777999') {
+      return res.json({ ok: false, error: 'Невірний 2FA код доступу!' });
+    }
+
+    // Ищем пользователя в базе данных и проверяем, назначен ли он админом
+    const result = await pool.query('SELECT * FROM users WHERE phone = \$1', [phone]);
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+
+    const user = result.rows[0];
+    
+    // Генерируем специальный защищенный JWT токен админа
+    const token = jwt.sign(
+      { id: user.id, role: 'admin', isAdmin: true }, 
+      JWT_SECRET, 
+      { expiresIn: '2h' } // Короткое время жизни токена админа для безопасности
+    );
+
+    res.json({ ok: true, token });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// 🚀 3. АДМИН: Получить из базы реальный список водителей, у которых is_verified = false
+app.get('/api/admin/unverified-drivers', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена' });
+    
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded.isAdmin) return res.json({ ok: false, error: 'Доступ заблоковано! Ви не адмін.' });
+
+    // Извлекаем тех водителей, у которых флаг верификации стоит в положении false
+    const result = await pool.query(
+      `SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber" 
+       FROM users 
+       WHERE role = 'driver' AND is_verified = false 
+       ORDER BY id DESC`
+    );
+    res.json({ ok: true, drivers: result.rows });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// 🚀 4. АДМИН: Нажатие кнопки "ВЕРИФІКУВАТИ" -> Ставим в Supabase флаг true
+app.post('/api/admin/verify-driver', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена' });
+    
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded.isAdmin) return res.json({ ok: false, error: 'Доступ заборонено' });
+
+    const { driverId } = req.body;
+    
+    // Обновляем статус верификации водителя в Supabase через пул подключений
+    await pool.query('UPDATE users SET is_verified = true WHERE id = \$1', [driverId]);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+
 // ==========================================
 // 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
 // ==========================================
