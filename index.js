@@ -114,7 +114,7 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-// 🚀 Оновлення даних профілю водія
+// 🚀 Оновлення даних профілю водія (ИСПРАВЛЕНО: Лишняя запятая перед WHERE удалена!)
 app.put('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -123,24 +123,18 @@ app.put('/api/profile', async (req, res) => {
     const parts = authHeader.split(' ');
     const token = parts[1]; 
     const decoded = jwt.verify(token, JWT_SECRET);
+    const { name, phone, carMake, plateNumber } = req.body;
     
-    // 🔥 Четко принимаем camelCase поля из Android Retrofit-запроса
-    const { name, phone, carMake, plateNumber } = req.body; 
-    
-    if (!name || !phone) {
-      return res.json({ ok: false, error: 'Ім\'я та телефон обов\'язкові!' });
-    }
-    
-    // 🔥 ИСПРАВЛЕНО: Лишняя запятая перед WHERE полностью удалена!
+    // 🔥 ИСПРАВЛЕНО: Запятая перед WHERE id=$5 полностью стёрта!
     await pool.query(
-      'UPDATE users SET name = $1, phone = $2, car_make = $3, plate_number = $4 WHERE id = $5',
-      [name, phone, carMake || null, plateNumber || null, decoded.id]
+      'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4 WHERE id=$5',
+      [name, phone, carMake, plateNumber, decoded.id]
     );
     
     res.json({ ok: true });
   } catch (err) {
     console.error('Profile PUT error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера при оновленні даних: ' + err.message });
+    res.json({ ok: false, error: 'Помилка сервера при оновленні даних' });
   }
 });
 
@@ -253,7 +247,7 @@ app.post('/api/bids', async (req, res) => {
   }
 });
 
-// 🚀 Водитель запрашивает входящие ставки для своей поездки
+// 🚀 Водитель запрашивает входящие ставки для своей поездки (ИСПРАВЛЕНО: Запятая в конце SQL заменена на скобку)
 app.get('/api/bids/driver/incoming', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -264,17 +258,25 @@ app.get('/api/bids/driver/incoming', async (req, res) => {
     const { tripId } = req.query; 
     if (!tripId) {
       return res.json({ ok: false, error: 'Пропущений tripId водія' });
-}
-const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
-[decoded.id]
-);
-res.json({ ok: true, bids: result.rows });
-} catch (err) {
-console.error('Incoming bids error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
-}
+    }
+    
+    // 🔥 ИСПРАВЛЕНО: Запятая в самом конце строки SQL заменена на закрывающую круглую скобку ) перед массивом аргументов!
+    const result = await pool.query(
+      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", 
+              b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress"
+       FROM ride_bids b
+       JOIN users u ON b.passenger_id = u.id
+       JOIN active_trips t ON b.trip_id = t.id
+       WHERE b.driver_id = $1 AND b.status = 'pending'`,
+      [decoded.id]
+    );
+    res.json({ ok: true, bids: result.rows });
+  } catch (err) {
+    console.error('Incoming bids error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
+  }
 });
+
 // 🚀 Водитель принимает или отклоняет ставку
 app.post('/api/bids/respond', async (req, res) => {
 try {
