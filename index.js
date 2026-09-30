@@ -258,37 +258,37 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 Поиск попутных водителей для пассажира
+// 🚀 Поиск попутных водителей — СИНХРОНИЗАЦИЯ ТИПОВ С КЛИЕНТОМ (::int)
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const { startLat, startLon, endLat, endLon } = req.query;
     if (!startLat || !startLon || !endLat || !endLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
-
     const pStartLat = parseFloat(startLat);
     const pStartLon = parseFloat(startLon);
     const pEndLat = parseFloat(endLat);
     const pEndLon = parseFloat(endLon);
-
+    
+    // 🔥 ИСПРАВЛЕНО: Добавлено ::int к t.user_id, чтобы PostgreSQL гарантированно отдавал число, а не строку!
     const result = await pool.query(
-      `SELECT t.id AS "tripId", t.user_id AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
+      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
-              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.car_photo_url AS "carPhotoUrl"
+              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
        FROM active_trips t
        JOIN users u ON t.user_id = u.id
        WHERE t.role = 'driver' AND t.status = 'searching'
-         AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 5.0
-         AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 5.0`,
+         AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 50.0
+         AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 50.0`,
       [pStartLat, pStartLon, pEndLat, pEndLon]
     );
-
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
     console.error('Get drivers error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 
 // ==========================================
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
