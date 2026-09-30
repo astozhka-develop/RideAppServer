@@ -476,6 +476,69 @@ app.post('/api/admin/verify-driver', async (req, res) => {
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 
+// ==========================================
+// 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
+// ==========================================
+
+// 🚀 1. Роут генерации счета на 150 грн
+app.post('/api/payment/create-invoice', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    
+    const parts = authHeader.split(' ');
+    const token = parts[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // В тестовом режиме мы просто генерируем ссылку на наш собственный сервер
+    const testPaymentUrl = `https://onrender.com{decoded.id}`;
+    
+    res.json({ ok: true, paymentUrl: testPaymentUrl });
+  } catch (err) {
+    res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
+  }
+});
+
+// 🚀 2. Веб-страница симулятора оплаты Monobank (Mono Pay)
+app.get('/payment/simulator', (req, res) => {
+  const userId = req.query.userId;
+  let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
+  html += '<title>Monobank | Тестова Оплата</title><style>';
+  html += 'body{font-family:sans-serif;background-color:#FFF;margin:0;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh;}';
+  html += '.card{max-width:400px;width:100%;border:2px solid #E0E0E0;padding:30px;border-radius:20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.05);}';
+  html += 'h2{color:#FF1744;margin-bottom:10px;}';
+  html += '.price{font-size:32px;font-weight:bold;margin:20px 0;color:#212121;}';
+  html += 'button{width:100%;height:54px;background-color:#212121;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
+  html += '</style></head><body>';
+  html += '<div class="card"><h2>monobank | fono pay</h2><p>Тестова оплата підписки Diway</p>';
+  html += '<div class="price">150.00 ₴</div>';
+  html += '<form action="/api/payment/webhook-simulation" method="POST">';
+  html += '<input type="hidden" name="userId" value="' + userId + '">';
+  html += '<button type="submit">УСПІШНО СПЛАТИТИ 150 ГРН</button></form></div>';
+  html += '</body></html>';
+  res.send(html);
+});
+
+// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
+app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.send('Помилка: Не вказано ID користувача');
+
+    // Сдвигаем подписку вперед на 30 дней от текущего момента NOW()
+    await pool.query(
+      `UPDATE users 
+       SET subscription_expires_at = NOW() + INTERVAL '30 days' 
+       WHERE id = $1`,
+      [parseInt(userId)]
+    );
+
+    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів. Можете повернутися в додаток.</p></body></html>');
+  } catch (err) {
+    res.send('Помилка обробки платежу: ' + err.message);
+  }
+});
+
 
 // ==========================================
 // 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
