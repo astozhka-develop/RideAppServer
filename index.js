@@ -116,7 +116,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання даних профілю з полями підписки
+// 🚀 Отримання даних профілю з автоматичним розрахунком тріалу та лічильника днів подписки
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -126,6 +126,7 @@ app.get('/api/profile', async (req, res) => {
     const token = parts[1]; 
     const decoded = jwt.verify(token, JWT_SECRET);
     
+    // Вытаскиваем даты регистрации (created_at) и окончания подписки (subscription_expires_at)
     const result = await pool.query(
       `SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", 
               created_at AS "createdAt", subscription_expires_at AS "subscriptionExpiresAt" 
@@ -137,12 +138,58 @@ app.get('/api/profile', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    res.json({ ok: true, user: result.rows[0] });
+    const user = result.rows[0];
+    
+    const now = new Date();
+    const createdAt = new Date(user.createdAt);
+    const subscriptionExpiresAt = user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt) : null;
+    
+    let daysLeft = 0;
+    let isBlocked = false;
+    
+    // 1. Вычисляем остаток 7 бесплатных дней триала
+    const trialPeriodMs = 7 * 24 * 60 * 60 * 1000; // 7 дней в миллисекундах
+    const trialExpiryDate = new Date(createdAt.getTime() + trialPeriodMs);
+    
+    if (now < trialExpiryDate) {
+      // Пользователь еще находится внутри 7-дневного бесплатного периода
+      const msLeft = trialExpiryDate - now;
+      daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+      isBlocked = false;
+    } else {
+      // 2. Семь дней бесплатного триала ИСТЕКЛИ. Проверяем купленную подписку
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        // Подписка куплена и она активна прямо сейчас
+        const msLeft = subscriptionExpiresAt - now;
+        daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24)); // Выдает 30, 29, 28... на убывание!
+        isBlocked = false;
+      } else {
+        // Бесплатные дни закончились И оплаченной подписки тоже нет -> БЛОКИРУЕМ!
+        daysLeft = 0;
+        isBlocked = true;
+      }
+    }
+    
+    // Возвращаем в Android расширенный профиль со счетчиком дней и флагом блокировки
+    res.json({ 
+      ok: true, 
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        carMake: user.carMake,
+        plateNumber: user.plateNumber,
+        daysLeft: daysLeft,       // Передаем счетчик дней (30, 29, 28...)
+        isBlocked: isBlocked      // Передаем статус блокировки (true/false)
+      }
+    });
   } catch (err) {
     console.error('Profile GET error:', err.message);
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
+
 
 
 // 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
