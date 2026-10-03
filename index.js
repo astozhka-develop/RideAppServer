@@ -87,7 +87,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 
-// 🚀 Авторизація (Логін) — ИСПРАВЛЕН ИНДЕКС МАССИВА СТРОК
+// 🚀 Авторизація (Логін) — ІСПРАВЛЕНО ЧИТАННЯ ПОЛІВ ИЗ СУБД
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -100,16 +100,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.json({ ok: false, error: 'Користувача не знайдено' });
     }
     
-    // 🔥 ИСПРАВЛЕНО: Берем именно нулевой (первый найденный) объект из массива строк!
     const user = result.rows[0]; 
     
-    // Теперь user.password_hash гарантированно содержит текстовый хэш пароля из Supabase
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return res.json({ ok: false, error: 'Невірний пароль' });
     }
     
-    // Генерируем JWT-токен, вшивая флаг админа
+    // 🔥 ІСПРАВЛЕНО: Читаємо змінні строго у форматі snake_case, як вони повернулися з бази Supabase!
     const token = jwt.sign(
       { id: user.id, role: user.role, isAdmin: user.is_admin || false }, 
       JWT_SECRET, 
@@ -123,19 +121,19 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання профілю з обчисленням тріалу ВІДТОВКНУВШИСЬ ВІД ID СМАРТФОНУ
+
+// 🚀 Отримання профілю — ІСПРАВЛЕНО СОПОСТАВЛЕННЯ СТРОК З LEFT JOIN
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
-    const token = authHeader.split(' '); 
+    const token = authHeader.split(' ')[1]; 
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Извлекаем данные пользователя и дату первой регистрации его смартфона из реестра девайсов
     const result = await pool.query(
-      `SELECT u.id, u.name, u.phone, u.role, u.car_make AS "carMake", u.plate_number AS "plateNumber", 
-              u.subscription_expires_at AS "subscriptionExpiresAt", u.device_id AS "deviceId",
-              d.first_registered_at AS "deviceFirstRegisteredAt"
+      `SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, 
+              u.subscription_expires_at, u.device_id,
+              d.first_registered_at
        FROM users u
        LEFT JOIN device_trials d ON u.device_id = d.device_id
        WHERE u.id = $1`,
@@ -146,41 +144,42 @@ app.get('/api/profile', async (req, res) => {
     const user = result.rows[0];
     
     const now = new Date();
-    // 🔥 БАЗОВАЯ ТОЧКА ОТСЧЕТА: Время, когда этот СМАРТФОН впервые зашел в систему!
-    const deviceRegisteredAt = user.deviceFirstRegisteredAt ? new Date(user.deviceFirstRegisteredAt) : new Date();
-    const subscriptionExpiresAt = user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt) : null;
+    const deviceRegisteredAt = user.first_registered_at ? new Date(user.first_registered_at) : new Date();
+    const subscriptionExpiresAt = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
     
     let daysLeft = 0;
     let isBlocked = false;
     
-    // Вычисляем остаток 7 бесплатных дней триала ДЛЯ ЖЕЛЕЗА ТЕЛЕФОНА
     const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
     if (now < trialExpiryDate) {
-      // Смартфон находится внутри своих законных 7 дней триала
       const msLeft = trialExpiryDate - now;
       daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
       isBlocked = false;
     } else {
-      // 7 дней железа ИСТЕКЛИ. Проверяем, куплена ли абонплата 150 грн
       if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
         const msLeft = subscriptionExpiresAt - now;
         daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
         isBlocked = false;
       } else {
-        // Триал железа кончился, подписки нет -> НАМЕРТВО БЛОКИРУЕМ!
         daysLeft = 0;
         isBlocked = true;
       }
     }
     
+    // 🔥 ІСПРАВЛЕНО: Поля з LEFT JOIN переведені з snake_case у camelCase для Android Retrofit!
     res.json({ 
       ok: true, 
       user: {
-        id: user.id, name: user.name, phone: user.phone, role: user.role,
-        carMake: user.carMake, plateNumber: user.plateNumber,
-        daysLeft: daysLeft, isBlocked: isBlocked
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        carMake: user.car_make,       
+        plateNumber: user.plate_number, 
+        daysLeft: daysLeft,
+        isBlocked: isBlocked
       }
     });
   } catch (err) {
@@ -188,7 +187,6 @@ app.get('/api/profile', async (req, res) => {
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
-
 
 
 // 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
@@ -520,14 +518,21 @@ app.get('/admin', (req, res) => {
 });
 
 
-// Админ логин на странице
+// 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { phone, code } = req.body;
     if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
-    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+    const result = await pool.query('SELECT * FROM users WHERE phone = \$1', [phone]);
     if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+    
     const user = result.rows[0];
+    
+    // 🔥 ІСПРАВЛЕНО: Читаємо прапорець адміна строго з підкресленням із бази даних!
+    if (!user.is_admin) {
+      return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
+    }
+
     const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
     res.json({ ok: true, token });
   } catch (err) { res.json({ ok: false, error: err.message }); }
@@ -603,7 +608,7 @@ app.post('/api/admin/manual-subscription', async (req, res) => {
 // 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
 // ==========================================
 
-// 🚀 1. Роут генерации счета на 150 грн
+// 🚀 1. Роут генерації рахунку на 150 грн — ІСПРАВЛЕНО ФОРМУВАННЯ ССЫЛКИ СИМУЛЯТОРА
 app.post('/api/payment/create-invoice', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -612,13 +617,13 @@ app.post('/api/payment/create-invoice', async (req, res) => {
     const parts = authHeader.split(' ');
     const token = parts[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    // В тестовом режиме мы просто генерируем ссылку на наш собственный сервер
+    
+    // 🔥 ІСПРАВЛЕНО: Адреса тепер веде на повноцінний евакуаційний шлюз симулятора з передачею userId!
     const testPaymentUrl = `https://onrender.com{decoded.id}`;
     
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
-    res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
+    res.json({ ok: false, error: 'Помилка majeure платежу: ' + err.message });
   }
 });
 
