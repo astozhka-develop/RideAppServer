@@ -423,12 +423,15 @@ app.get('/', (req, res) => {
   res.redirect('/admin');
 });
 
+// ==========================================
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
+// ==========================================
 app.get('/admin', (req, res) => {
   let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
   html += '<title>Панель Admin Diway</title><style>';
   html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
-  html += '.auth-container,.dashboard-container{max-width:500px;margin:80px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
-  html += '.dashboard-container{max-width:800px;margin:40px auto;display:none;}';
+  html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
+  html += '.dashboard-container{max-width:800px;margin:20px auto;display:none;}';
   html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
   html += '.form-group{margin-bottom:20px;}';
   html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
@@ -437,13 +440,29 @@ app.get('/admin', (req, res) => {
   html += '.driver-card{background:#FFFFFF;border:1.5px solid #E0E0E0;border-radius:16px;padding:20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}';
   html += '.badge{display:inline-block;padding:4px 12px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-weight:bold;font-size:12px;}';
   html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
-  html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:40px;}';
+  html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
+  html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
   html += '</style></head><body>';
   html += '<div class="auth-container" id="authBlock"><h2>Вхід до Diway Admin</h2>';
   html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
   html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="text" id="adminCode" placeholder="777999" maxlength="6" style="text-align:center;font-weight:bold;"></div>';
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
-  html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Модерації Водіїв</h2><div id="driversList"><div class="no-data">Завантаження заявок...</div></div></div>';
+  
+  // Главная панель
+  html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
+  
+  // 🔥 НОВЫЙ БЛОК: Ручное управление подписками тестеров
+  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками (Для тестування)</h3>';
+  html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
+  html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
+  html += '<input type="text" id="targetUserPhone" placeholder="+380XXXXXXXXX" style="flex:1; height:48px;">';
+  html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
+  html += '</div></div>';
+
+  // Лента модерации водителей
+  html += '<h3>📋 Водії, які очікують модерації</h3>';
+  html += '<div id="driversList"><div class="no-data">Завантаження заявок...</div></div></div>';
+  
   html += '<script>';
   html += 'let adminToken = "";';
   html += 'async function loginAdmin() {';
@@ -476,12 +495,30 @@ app.get('/admin', (req, res) => {
   html += '  try {';
   html += '    const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId }) });';
   html += '    const data = await response.json();';
-  html += '    if (data.ok) { alert("Водія успешно верифіковано!"); loadUnverifiedDrivers(); } else { alert("Помилка: " + data.error); }';
+  html += '    if (data.ok) { alert("Водія успішно верифіковано!"); loadUnverifiedDrivers(); } else { alert("Помилка: " + data.error); }';
   html += '  } catch (err) { alert("Помилка сервера"); }';
   html += '}';
+  
+  // 🔥 ФУНКЦИЯ КЛИКА: Шлёт запрос ручного начисления безлимита
+  html += 'async function grantManualSubscription() {';
+  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
+  html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
+  html += '  try {';
+  html += '    const response = await fetch("/api/admin/manual-subscription", {';
+  html += '      method: "POST",';
+  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+  html += '      body: JSON.stringify({ phone })';
+  html += '    });';
+  html += '    const data = await response.json();';
+  html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; }';
+  html += '    else { alert("❌ Помилка: " + data.error); }';
+  html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
+  html += '}';
+  
   html += '</script></body></html>';
   res.send(html);
 });
+
 
 // Админ логин на странице
 app.post('/api/admin/login', async (req, res) => {
@@ -521,6 +558,46 @@ app.post('/api/admin/verify-driver', async (req, res) => {
     res.json({ ok: true });
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
+
+// 🚀 АДМІН: Ручне нарахування безлімітного доступу тестовим смартфонам по номеру телефону
+app.post('/api/admin/manual-subscription', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const parts = authHeader.split(' ');
+    const token = parts[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Перевіряємо права адміністратора
+    if (!decoded.isAdmin) {
+      return res.json({ ok: false, error: 'У вас немає прав доступу!' });
+    }
+
+    const { phone } = req.body;
+    if (!phone) return res.json({ ok: false, error: 'Введіть номер телефону користувача!' });
+
+    // Проверяем, существует ли пользователь с таким номером
+    const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone.trim()]);
+    if (checkUser.rows.length === 0) {
+      return res.json({ ok: false, error: 'Користувача з таким номером телефону не знайдено!' });
+    }
+
+    // 🔥 НАЧИСЛЯЕМ БЕЗЛИМИТ: Принудительно сдвигаем подписку до 2050 года для тестов
+    await pool.query(
+      `UPDATE users 
+       SET subscription_expires_at = '2050-01-01 00:00:00+00' 
+       WHERE phone = $1`,
+      [phone.trim()]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Admin manual subscription error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
+  }
+});
+
 
 // ==========================================
 // 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
