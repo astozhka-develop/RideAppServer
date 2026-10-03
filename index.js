@@ -558,7 +558,7 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     const result = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
-      WHERE role = 'driver' 
+      WHERE role = 'Водій' 
       ORDER BY is_verified ASC, id DESC
     `);
 
