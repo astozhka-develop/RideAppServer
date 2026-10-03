@@ -608,24 +608,24 @@ app.post('/api/admin/manual-subscription', async (req, res) => {
 // 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
 // ==========================================
 
-// 🚀 1. Роут генерації рахунку на 150 грн — ІСПРАВЛЕНО ФОРМУВАННЯ ССЫЛКИ СИМУЛЯТОРА
 app.post('/api/payment/create-invoice', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts[1];
+    // 🔥 ИСПРАВЛЕНО: Безопасное извлечение токена независимо от формата (Bearer или чистый)
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // 🔥 ІСПРАВЛЕНО: Адреса тепер веде на повноцінний евакуаційний шлюз симулятора з передачею userId!
     const testPaymentUrl = `https://onrender.com{decoded.id}`;
-    
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
-    res.json({ ok: false, error: 'Помилка majeure платежу: ' + err.message });
+    console.error('Invoice creation error:', err.message);
+    res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
   }
 });
+
 
 // 🚀 2. Веб-страница симулятора оплаты Monobank (Mono Pay)
 app.get('/payment/simulator', (req, res) => {
