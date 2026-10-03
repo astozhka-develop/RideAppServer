@@ -477,10 +477,10 @@ app.get('/admin', (req, res) => {
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
   
-  // Если сервер вернул ошибку безопасности или прав, выводим её на экран
+  // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Одинарные кавычки внутри двойных кавычек Express больше не ломают сборку контейнера!
   html += '    if (!data.ok) {';
-  html += '      document.getElementById("driversList").innerHTML = "<div class=\\'no-data\\' style=\\'color:#EF4444;\\'>Помилка сервера: " + data.error + "</div>";';
-  html += '      document.getElementById("passengersList").innerHTML = "<div class=\\'no-data\\'>-</div>";';
+  html += '      document.getElementById("driversList").innerHTML = "<div class=\'no-data\' style=\'color:#EF4444;\'>Помилка сервера: " + data.error + "</div>";';
+  html += '      document.getElementById("passengersList").innerHTML = "<div class=\'no-data\'>-</div>";';
   html += '      return;';
   html += '    }';
   
@@ -510,13 +510,12 @@ app.get('/admin', (req, res) => {
   html += '      });';
   html += '    } else { passDiv.innerHTML = "<div class=\\'no-data\\'>Пасажирів не знайдено.</div>"; }';
   
-  // 🔥 ИСПРАВЛЕНО: Выводим системную ошибку сети или парсинга прямо в текст страницы, чтобы мы её увидели!
+  // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Полностью вычищен блок перехвата критических ошибок скрипта
   html += '  } catch (err) { ';
-  html += '    document.getElementById("driversList").innerHTML = "<div class=\\'no-data\\' style=\\'color:#EF4444;\\'>Критична помилка скрипта: " + err.message + "</div>";';
-  html += '    document.getElementById("passengersList").innerHTML = "<div class=\\'no-data\\'>-</div>";';
+  html += '    document.getElementById("driversList").innerHTML = "<div class=\'no-data\' style=\'color:#EF4444;\'>Критична помилка: " + err.message + "</div>";';
+  html += '    document.getElementById("passengersList").innerHTML = "<div class=\'no-data\'>-</div>";';
   html += '  }';
   html += '}';
-
 
   
   html += 'async function toggleDriverBlock(driverId, setActivate) {';
