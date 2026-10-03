@@ -446,10 +446,7 @@ app.get('/admin', (req, res) => {
   html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="text" id="adminCode" placeholder="777999" maxlength="6" style="text-align:center;font-weight:bold;"></div>';
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
-  // Главная панель
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
-  
-  // 🔥 НОВЫЙ БЛОК: Ручное управление подписками тестеров
   html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками (Для тестування)</h3>';
   html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
   html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
@@ -457,9 +454,8 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
-  // Лента модерации водителей
-  html += '<h3>📋 Водії, які очікують модерації</h3>';
-  html += '<div id="driversList"><div class="no-data">Завантаження заявок...</div></div></div>';
+  html += '<h3>📋 Усі зареєстровані водії та керування доступом</h3>';
+  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
   
   html += '<script>';
   html += 'let adminToken = "";';
@@ -474,6 +470,7 @@ app.get('/admin', (req, res) => {
   html += '    else { alert("Відмовлено: " + data.error); }';
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
+  
   html += 'async function loadUnverifiedDrivers() {';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
@@ -483,21 +480,30 @@ app.get('/admin', (req, res) => {
   html += '    if (data.ok && data.drivers && data.drivers.length > 0) {';
   html += '      data.drivers.forEach(driver => {';
   html += '        const card = document.createElement("div"); card.className = "driver-card";';
-  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class=\'actions\'><button class=\'btn-approve\' onclick=\'verifyDriver(" + driver.id + ")\'>ВЕРИФІКУВАТИ</button></div>";';
+  html += '        let statusBadge = driver.isVerified ? "<span class=\\"badge\\" style=\\"background:#D1FAE5; color:#065F46;\\">Активний</span>" : "<span class=\\"badge\\" style=\\"background:#FEE2E2; color:#991B1B;\\">ЗАБЛОКОВАНИЙ</span>";';
+  html += '        let actionButton = driver.isVerified ? "<button class=\\"btn-approve\\" style=\\"background-color:#EF4444;\\" onclick=\\"toggleDriverBlock(" + driver.id + ", false)\\">ЗАБЛОКУВАТИ</button>" : "<button class=\\"btn-approve\\" style=\\"background-color:#10B981;\\" onclick=\\"toggleDriverBlock(" + driver.id + ", true)\\">РОЗБЛОКУВАТИ</button>";';
+  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class=\'actions\'><div style=\'display:flex; gap:10px;\'>" + actionButton + "</div></div>";';
   html += '        listDiv.appendChild(card);';
   html += '      });';
-  html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Немає нових заявок. Все перевірено!</div>"; }';
-  html += '  } catch (err) { document.getElementById("driversList").innerHTML = "<div class=\'no-data\'>Помилка завантаження</div>"; }';
+  html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено в базі даних.</div>"; }';
+  html += '  } catch (err) { document.getElementById("driversList").innerHTML = "<div class=\'no-data\'>Помилка завантаження даних</div>"; }';
   html += '}';
-  html += 'async function verifyDriver(driverId) {';
+  
+  html += 'async function toggleDriverBlock(driverId, setActivate) {';
+  html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього водія?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього водія? Його радар буде вимкнено!");';
+  html += '  if (!confirmAction) return;';
   html += '  try {';
-  html += '    const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId }) });';
+  html += '    const response = await fetch("/api/admin/verify-driver", {';
+  html += '      method: "POST",';
+  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+  html += '      body: JSON.stringify({ driverId, activeStatus: setActivate })';
+  html += '    });';
   html += '    const data = await response.json();';
-  html += '    if (data.ok) { alert("Водія успішно верифіковано!"); loadUnverifiedDrivers(); } else { alert("Помилка: " + data.error); }';
+  html += '    if (data.ok) { alert(setActivate ? "Водія успішно розблоковано!" : "🔴 Водія успішно заблоковано в Supabase!"); loadUnverifiedDrivers(); }';
+  html += '    else { alert("Помилка: " + data.error); }';
   html += '  } catch (err) { alert("Помилка сервера"); }';
   html += '}';
   
-  // 🔥 ФУНКЦИЯ КЛИКА: Шлёт запрос ручного начисления безлимита
   html += 'async function grantManualSubscription() {';
   html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
   html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
@@ -506,7 +512,7 @@ app.get('/admin', (req, res) => {
   html += '      method: "POST",';
   html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
   html += '      body: JSON.stringify({ phone })';
-  html += '    });';
+  表达 += '    });';
   html += '    const data = await response.json();';
   html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; }';
   html += '    else { alert("❌ Помилка: " + data.error); }';
@@ -516,7 +522,6 @@ app.get('/admin', (req, res) => {
   html += '</script></body></html>';
   res.send(html);
 });
-
 
 // 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
 app.post('/api/admin/login', async (req, res) => {
@@ -538,18 +543,32 @@ app.post('/api/admin/login', async (req, res) => {
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 
-// Админ: Получить невыверенных водителей
+// 🚀 АДМІН: Отримання з Supabase ПОВНОГО списку водіїв (Активні + Заблоковані)
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader.split(' ')[1];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const parts = authHeader.split(' ');
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    const result = await pool.query("SELECT id, name, phone, car_make AS \"carMake\", plate_number AS \"plateNumber\" FROM users WHERE role='driver' AND is_verified=false ORDER BY id DESC");
+    // 🔥 ЭТАЛОННЫЙ ВАРИАНТ: Извлекаем ВСЕХ водителей из Supabase (заблокированные будут в самом верху списка!)
+    const result = await pool.query(`
+      SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
+      FROM users 
+      WHERE role = 'driver' 
+      ORDER BY is_verified ASC, id DESC
+    `);
+
     res.json({ ok: true, drivers: result.rows });
-  } catch (err) { res.json({ ok: false, error: err.message }); }
+  } catch (err) { 
+    console.error('Admin drivers fetch error:', err.message);
+    res.json({ ok: false, error: err.message }); 
+  }
 });
+
 
 // Админ: Одобрить водителя
 app.post('/api/admin/verify-driver', async (req, res) => {
