@@ -512,7 +512,7 @@ app.get('/admin', (req, res) => {
   html += '      method: "POST",';
   html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
   html += '      body: JSON.stringify({ phone })';
-  表达 += '    });';
+  html += '    });';
   html += '    const data = await response.json();';
   html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; }';
   html += '    else { alert("❌ Помилка: " + data.error); }';
