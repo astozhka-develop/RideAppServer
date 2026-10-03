@@ -455,6 +455,7 @@ app.get('/admin', (req, res) => {
   html += '</div></div>';
 
   html += '<h3>📋 Усі зареєстровані водії та керування доступом</h3>';
+  html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
   html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
   
   html += '<script>';
@@ -471,10 +472,12 @@ app.get('/admin', (req, res) => {
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
   
-  html += 'async function loadUnverifiedDrivers() {';
+   html += 'async function loadUnverifiedDrivers() {';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
+  
+  html += '    // 🟢 ОТРИСОВКА ВОДИТЕЛЕЙ';
   html += '    const listDiv = document.getElementById("driversList");';
   html += '    listDiv.innerHTML = "";';
   html += '    if (data.ok && data.drivers && data.drivers.length > 0) {';
@@ -485,9 +488,24 @@ app.get('/admin', (req, res) => {
   html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class=\'actions\'><div style=\'display:flex; gap:10px;\'>" + actionButton + "</div></div>";';
   html += '        listDiv.appendChild(card);';
   html += '      });';
-  html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено в базі даних.</div>"; }';
-  html += '  } catch (err) { document.getElementById("driversList").innerHTML = "<div class=\'no-data\'>Помилка завантаження даних</div>"; }';
+  html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено.</div>"; }';
+  
+  html += '    // 🔥 ОТРИСОВКА ПАССАЖИРОВ (НОВЫЙ ФУНКЦИОНАЛ)';
+  html += '    const passDiv = document.getElementById("passengersList");';
+  html += '    passDiv.innerHTML = "";';
+  html += '    if (data.ok && data.passengers && data.passengers.length > 0) {';
+  html += '      data.passengers.forEach(pass => {';
+  html += '        const card = document.createElement("div"); card.className = "driver-card";';
+  html += '        let statusBadge = pass.isVerified ? "<span class=\\"badge\\" style=\\"background:#D1FAE5; color:#065F46;\\">Активний</span>" : "<span class=\\"badge\\" style=\\"background:#FEE2E2; color:#991B1B;\\">ЗАБЛОКОВАНИЙ</span>";';
+  html += '        let actionButton = pass.isVerified ? "<button class=\\"btn-approve\\" style=\\"background-color:#EF4444;\\" onclick=\\"toggleDriverBlock(" + pass.id + ", false)\\">ЗАБЛОКУВАТИ</button>" : "<button class=\\"btn-approve\\" style=\\"background-color:#10B981;\\" onclick=\\"toggleDriverBlock(" + pass.id + ", true)\\">РОЗБЛОКУВАТИ</button>";';
+  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + pass.name + " " + statusBadge + "</h3><p>Тел: " + pass.phone + "</p></div><div class=\'actions\'><div style=\'display:flex; gap:10px;\'>" + actionButton + "</div></div>";';
+  html += '        passDiv.appendChild(card);';
+  html += '      });';
+  html += '    } else { passDiv.innerHTML = "<div class=\'no-data\'>Пасажирів не знайдено.</div>"; }';
+  
+  html += '  } catch (err) { console.error(err); }';
   html += '}';
+
   
   html += 'async function toggleDriverBlock(driverId, setActivate) {';
   html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього водія?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього водія? Його радар буде вимкнено!");';
@@ -543,7 +561,7 @@ app.post('/api/admin/login', async (req, res) => {
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 
-// 🚀 АДМІН: Отримання з Supabase ПОВНОГО списку водіїв (Активні + Заблоковані)
+// 🚀 АДМІН: Отримання з Supabase ПОВНОГО списку водіїв та пасажирів для модерації
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -554,20 +572,34 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 🔥 ЭТАЛОННЫЙ ВАРИАНТ: Извлекаем ВСЕХ водителей из Supabase (заблокированные будут в самом верху списка!)
-    const result = await pool.query(`
+    // 🟢 1. Витягуємо ВСІХ водіїв з бази
+    const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
       WHERE role = 'Водій' 
       ORDER BY is_verified ASC, id DESC
     `);
 
-    res.json({ ok: true, drivers: result.rows });
+    // 🟢 2. Витягуємо ВСІХ пасажирів з бази
+    const passengersResult = await pool.query(`
+      SELECT id, name, phone, is_verified AS "isVerified"
+      FROM users 
+      WHERE role = 'Пасажир' 
+      ORDER BY is_verified ASC, id DESC
+    `);
+
+    // Віддаємо на веб-сторінку обидва масиви даних
+    res.json({ 
+      ok: true, 
+      drivers: driversResult.rows,
+      passengers: passengersResult.rows
+    });
   } catch (err) { 
-    console.error('Admin drivers fetch error:', err.message);
+    console.error('Admin users fetch error:', err.message);
     res.json({ ok: false, error: err.message }); 
   }
 });
+
 
 
 // Админ: Одобрить водителя
