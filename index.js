@@ -561,18 +561,21 @@ app.post('/api/admin/login', async (req, res) => {
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 
-// 🚀 АДМІН: Отримання з Supabase ПОВНОГО списку водіїв та пасажирів для модерації
+// 🚀 АДМІН: Отримання ПОВНОГО списку водіїв та пасажирів (ВСЕЯДНИЙ ДЛЯ ВЕБ І АНДРОЇД)
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
     const parts = authHeader.split(' ');
+    
+    // 🔥 ИСПРАВЛЕНО: Еслиparts[1] существует (это веб-браузер с Bearer), берем его. Если нет (это Android) — берем чистый parts[0]!
     const token = parts.length > 1 ? parts[1] : parts[0];
+    
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 🟢 1. Витягуємо ВСІХ водіїв з бази
+    // 1. Витягуємо ВСІХ водіїв з бази
     const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
@@ -580,7 +583,7 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // 🟢 2. Витягуємо ВСІХ пасажирів з бази
+    // 2. Витягуємо ВСІХ пасажирів з бази
     const passengersResult = await pool.query(`
       SELECT id, name, phone, is_verified AS "isVerified"
       FROM users 
@@ -595,8 +598,8 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       passengers: passengersResult.rows
     });
   } catch (err) { 
-    console.error('Admin users fetch error:', err.message);
-    res.json({ ok: false, error: err.message }); 
+    console.error('Admin drivers fetch error:', err.message);
+    res.json({ ok: false, error: 'Помилка безпеки токена: ' + err.message }); 
   }
 });
 
