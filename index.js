@@ -52,33 +52,40 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-// 🚀 Регистрация нового пользователя
+// 🚀 Реєстрація нового користувача З ПРИВ'ЯЗКОЮ ДО ID СМАРТФОНУ (Захист від абузу триалу)
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, phone, role, password, carMake, plateNumber, carPhotoUrl } = req.body;
-    if (!name || !phone || !password || !role) {
-      return res.json({ ok: false, error: 'Заповніть всі обов\'язкові поля' });
+    const { name, phone, role, password, carMake, plateNumber, deviceId } = req.body;
+    if (!name || !phone || !password || !role || !deviceId) {
+      return res.json({ ok: false, error: 'Заповніть обов\'язкові поля та ID пристрою!' });
     }
     
-    const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
-    if (checkUser.rows.length > 0) {
-      return res.json({ ok: false, error: 'Користувач з таким номером телефону вже зареєстрований!' });
-    }
+    // Проверяем, зарегистрирован ли уже этот номер телефона
+    const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone]);
+    if (checkUser.rows.length > 0) return res.json({ ok: false, error: 'Користувач вже зареєстрований!' });
     
+    // 🔥 АНТИ-ХАКЕРСКИЙ ТРИГГЕР: Проверяем, светилось ли уже это устройство в реестре триалов
+    const checkDevice = await pool.query('SELECT id FROM device_trials WHERE device_id = \$1', [deviceId]);
+    if (checkDevice.rows.length === 0) {
+      // Если устройство новое — бережно заносим его в реестр девайсов
+      await pool.query('INSERT INTO device_trials (device_id, first_registered_at) VALUES (\$1, NOW())', [deviceId]);
+    }
+
     const password_hash = await bcrypt.hash(password, 10);
     
-    // Записываем пользователя со всеми новыми MVP-полями под фото и госномер!
+    // Сохраняем пользователя, намертво привязывая к нему device_id смартфона
     const result = await pool.query(
-      `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, car_photo_url, is_verified) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
-      [name, phone, password_hash, role, carMake || null, plateNumber || null, carPhotoUrl || null]
+      `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, is_verified, device_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7) RETURNING id`,
+      [name, phone, password_hash, role, carMake || null, plateNumber || null, deviceId]
     );
-    res.json({ ok: true, userId: result.rows.id });
+    res.json({ ok: true, userId: result.rows[0].id });
   } catch (err) {
     console.error('Registration error:', err.message);
-    res.json({ ok: false, error: 'Server error: ' + err.message });
+    res.json({ ok: false, error: err.message });
   }
 });
+
 
 // 🚀 Авторизація (Логін) — ИСПРАВЛЕН ИНДЕКС МАССИВА СТРОК
 app.post('/api/auth/login', async (req, res) => {
@@ -116,72 +123,64 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання даних профілю з автоматичним розрахунком тріалу та лічильника днів подписки
+// 🚀 Отримання профілю з обчисленням тріалу ВІДТОВКНУВШИСЬ ВІД ID СМАРТФОНУ
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
-    const parts = authHeader.split(' ');
-    const token = parts[1]; 
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
+    const token = authHeader.split(' '); 
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Вытаскиваем даты регистрации (created_at) и окончания подписки (subscription_expires_at)
+    // Извлекаем данные пользователя и дату первой регистрации его смартфона из реестра девайсов
     const result = await pool.query(
-      `SELECT id, name, phone, role, car_make AS "carMake", plate_number AS "plateNumber", 
-              created_at AS "createdAt", subscription_expires_at AS "subscriptionExpiresAt" 
-       FROM users WHERE id = $1`,
+      `SELECT u.id, u.name, u.phone, u.role, u.car_make AS "carMake", u.plate_number AS "plateNumber", 
+              u.subscription_expires_at AS "subscriptionExpiresAt", u.device_id AS "deviceId",
+              d.first_registered_at AS "deviceFirstRegisteredAt"
+       FROM users u
+       LEFT JOIN device_trials d ON u.device_id = d.device_id
+       WHERE u.id = $1`,
       [decoded.id]
     );
     
-    if (result.rows.length === 0) {
-      return res.json({ ok: false, error: 'Користувача не знайдено' });
-    }
-    
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     const user = result.rows[0];
     
     const now = new Date();
-    const createdAt = new Date(user.createdAt);
+    // 🔥 БАЗОВАЯ ТОЧКА ОТСЧЕТА: Время, когда этот СМАРТФОН впервые зашел в систему!
+    const deviceRegisteredAt = user.deviceFirstRegisteredAt ? new Date(user.deviceFirstRegisteredAt) : new Date();
     const subscriptionExpiresAt = user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt) : null;
     
     let daysLeft = 0;
     let isBlocked = false;
     
-    // 1. Вычисляем остаток 7 бесплатных дней триала
-    const trialPeriodMs = 7 * 24 * 60 * 60 * 1000; // 7 дней в миллисекундах
-    const trialExpiryDate = new Date(createdAt.getTime() + trialPeriodMs);
+    // Вычисляем остаток 7 бесплатных дней триала ДЛЯ ЖЕЛЕЗА ТЕЛЕФОНА
+    const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
+    const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
     if (now < trialExpiryDate) {
-      // Пользователь еще находится внутри 7-дневного бесплатного периода
+      // Смартфон находится внутри своих законных 7 дней триала
       const msLeft = trialExpiryDate - now;
       daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
       isBlocked = false;
     } else {
-      // 2. Семь дней бесплатного триала ИСТЕКЛИ. Проверяем купленную подписку
+      // 7 дней железа ИСТЕКЛИ. Проверяем, куплена ли абонплата 150 грн
       if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
-        // Подписка куплена и она активна прямо сейчас
         const msLeft = subscriptionExpiresAt - now;
-        daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24)); // Выдает 30, 29, 28... на убывание!
+        daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
         isBlocked = false;
       } else {
-        // Бесплатные дни закончились И оплаченной подписки тоже нет -> БЛОКИРУЕМ!
+        // Триал железа кончился, подписки нет -> НАМЕРТВО БЛОКИРУЕМ!
         daysLeft = 0;
         isBlocked = true;
       }
     }
     
-    // Возвращаем в Android расширенный профиль со счетчиком дней и флагом блокировки
     res.json({ 
       ok: true, 
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-        carMake: user.carMake,
-        plateNumber: user.plateNumber,
-        daysLeft: daysLeft,       // Передаем счетчик дней (30, 29, 28...)
-        isBlocked: isBlocked      // Передаем статус блокировки (true/false)
+        id: user.id, name: user.name, phone: user.phone, role: user.role,
+        carMake: user.carMake, plateNumber: user.plateNumber,
+        daysLeft: daysLeft, isBlocked: isBlocked
       }
     });
   } catch (err) {
