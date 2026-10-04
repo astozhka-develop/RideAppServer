@@ -167,11 +167,12 @@ app.get('/api/profile', async (req, res) => {
       isBlocked = true;
     }
 
-    // 🔥 Проверяем ручную блокировку админом по колонке из Supabase
-    if (user.is_verified === false || user.is_verified === 'false') {
+        // 🔥 ИСПРАВЛЕНО: Правильное сравнение булевого типа Supabase (без кавычек!)
+    if (user.is_verified === false || user.is_verified === 0) {
       daysLeft = 0;
       isBlocked = true;
     }
+
        
     res.json({ 
       ok: true, 
@@ -230,11 +231,18 @@ app.post('/api/trips', async (req, res) => {
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts[1];
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+    // 🔥 ДОБАВЛЕНО: Если пользователь заблокирован в админке, сервер ЗАПРЕТИТ ему включать радар!
+    const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [decoded.id]);
+    if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
+      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
+    }
     
+    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+    // ... далее ваш оригинальный код UPDATE и INSERT в active_trips остается без изменений
+  
     // Отменяем старые незавершенные поиски этого пользователя, чтобы не плодить дубли в базе
     await pool.query(
       "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
@@ -273,6 +281,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pEndLat = parseFloat(endLat);
     const pEndLon = parseFloat(endLon);
     
+        // 🔥 ИСПРАВЛЕНО: Гарантированная фильтрация только активных (не забаненных) водителей
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
@@ -284,6 +293,7 @@ app.get('/api/trips/drivers', async (req, res) => {
          AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 50.0`,
       [pStartLat, pStartLon, pEndLat, pEndLon]
     );
+
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
     console.error('Get drivers error:', err.message);
