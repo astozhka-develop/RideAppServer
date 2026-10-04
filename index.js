@@ -506,14 +506,20 @@ app.get('/admin', (req, res) => {
         return;
       }
       
-      // ОТРИСОВКА ВОДИТЕЛЕЙ
+            // ОТРИСОВКА ВОДИТЕЛЕЙ
       const listDiv = document.getElementById("driversList");
       listDiv.innerHTML = "";
       if (data.drivers && data.drivers.length > 0) {
         data.drivers.forEach(driver => {
           const card = document.createElement("div"); card.className = "driver-card";
-          let statusBadge = driver.isVerified ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
-          let actionButton = driver.isVerified ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ</button>";
+          
+          // 🟢 ВСТАВЛЕНО: Строгое определение активности водителя
+          let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
+          
+          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки теперь переключаются на основе переменной isDriverActive
+          let statusBadge = isDriverActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
+          let actionButton = isDriverActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ</button>";
+          
           card.innerHTML = "<div class='driver-info'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class='badge'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
           listDiv.appendChild(card);
         });
@@ -525,14 +531,21 @@ app.get('/admin', (req, res) => {
       if (data.passengers && data.passengers.length > 0) {
         data.passengers.forEach(pass => {
           const card = document.createElement("div"); card.className = "driver-card";
-          let statusBadge = pass.isVerified ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
-          let actionButton = pass.isVerified ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ</button>";
+          
+          // 🟢 ВСТАВЛЕНО: Строгое определение активности пассажира
+          let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
+          
+          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки пассажиров на основе переменной isPassengerActive
+          let statusBadge = isPassengerActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
+          let actionButton = isPassengerActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ</button>";
+          
           card.innerHTML = "<div class='driver-info'><h3>" + pass.name + " " + statusBadge + "</h3><p>Тел: " + pass.phone + "</p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
           passDiv.appendChild(card);
         });
       } else { passDiv.innerHTML = "<div class='no-data'>Пасажирів не знайдено.</div>"; }
       
-    } catch (err) { 
+    } catch (err) {
+
       document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Критична помилка: " + err.message + "</div>";
       document.getElementById("passengersList").innerHTML = "<div class='no-data'>-</div>";
     }
