@@ -710,17 +710,16 @@ app.get('/payment/simulator', (req, res) => {
   res.send(html);
 });
 
-// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
+// 🚀 3. Симуляция Вебхука Monobank: Переведено на обычные кавычки для гарантированного запуска!
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { userId } = req.body;
     if (!userId) return res.send('Помилка: Не вказано ID користувача');
     
-    // 🔥 ИСПРАВЛЕНО: Запрос обернут в строгие косые кавычки ` `, баланс скобок идеален!
-    await pool.query(
-      `UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days' WHERE id = $1`,
-      [parseInt(userId)]
-    );
+    // 🔥 ИСПРАВЛЕНО: Косые кавычки убраны. Одинарные кавычки экранированы через сложение строк!
+    const sqlQuery = 'UPDATE users SET subscription_expires_at = NOW() + INTERVAL \'30 days\' WHERE id = $1';
+    await pool.query(sqlQuery, [parseInt(userId)]);
+    
     res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів. Можете повернутися в додаток.</p></body></html>');
   } catch (err) {
     res.send('Помилка обробки платежу: ' + err.message);
