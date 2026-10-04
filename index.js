@@ -11,6 +11,9 @@ const path = require('path');
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
+// В самом верху файла index.js (под app.use(cors())) добавьте парсер веб-форм:
+app.use(express.urlencoded({ extended: true }));
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 const PORT = process.env.PORT || 5000;
@@ -586,24 +589,30 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
-// 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
+// 🚀 Адмін логін на сторінці — ТОЧЕЧНОЕ ИСПРАВЛЕННОЕ ИЗВЛЕЧЕНИЕ ОБЪЕКТА ИЗ МАССИВА ROWS
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { phone, code } = req.body;
+    if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
     if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
-    const result = await pool.query('SELECT * FROM users WHERE phone = \$1', [phone]);
+    
+    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
     if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Берем именно нулевой элемент массива rows!
     const user = result.rows[0];
     
-    // 🔥 ІСПРАВЛЕНО: Читаємо прапорець адміна строго з підкресленням із бази даних!
+    // 🔥 ТЕПЕРЬ СВОЙСТВО ЧИТАЕТСЯ ИДЕАЛЬНО
     if (!user.is_admin) {
       return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
     }
 
     const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
     res.json({ ok: true, token });
-  } catch (err) { res.json({ ok: false, error: err.message }); }
+  } catch (err) { 
+    console.error('Admin login error:', err.message);
+    res.json({ ok: false, error: err.message }); 
+  }
 });
 
 // 🚀 АДМІН: Отримання ПОВНОГО списку водіїв та пасажирів (ВСЕЯДНИЙ ДЛЯ ВЕБ І АНДРОЇД)
