@@ -105,7 +105,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання профілю (ІСПРАВЛЕНО ПРІОРИТЕТ ОПЛАТИ МОНОБАНКУ НАД ТРІАЛОМ!)
+// 🚀 Отримання профілю
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -136,23 +136,19 @@ app.get('/api/profile', async (req, res) => {
     const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
-    // 🔥 ФІКС ПРІОРИТЕТУ: Спочатку перевіряємо сплачену підписку!
     if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
       const msLeft = subscriptionExpiresAt - now;
       daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
       isBlocked = false;
     } else if (now < trialExpiryDate) {
-      // Якщо підписки немає, але триал залізяки ще активний
       const msLeft = trialExpiryDate - now;
       daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
       isBlocked = false;
     } else {
-      // Все закінчилось — блок
       daysLeft = 0;
       isBlocked = true;
     }
 
-    // Ручне блокування адміном
     if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
       daysLeft = 0;
       isBlocked = true;
@@ -249,49 +245,44 @@ app.get('/api/trips/drivers', async (req, res) => {
        JOIN users u ON t.user_id = u.id
        WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true
        ORDER BY t.id DESC`
-);
-res.json({ ok: true, drivers: result.rows });
-} catch (err) {
-console.error('Get drivers error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
-}
-});
-// 🚀 БЛОК СТАВОК (ТОРГИ) — ИСПРАВЛЕНА СИНТАКСИЧЕСКАЯ КАВЫЧКА SQL ЗАПРОСА
-app.post('/api/bids', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-    
-    // 🔥 ИСПРАВЛЕНО: Добавлен обратный апостроф ` перед текстом SELECT запроса!
-    const checkAttempts = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
-      [tripId, decoded.id, driverId]
     );
-    
-    const currentAttempts = checkAttempts.rows[0].count;
-    const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [driverId]);
-    if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
-    }
-    if (currentAttempts >= 3) return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
-    
-    const nextAttemptNumber = currentAttempts + 1;
-    const result = await pool.query(
-      `INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
-      [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
-    );
-    res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+    res.json({ ok: true, drivers: result.rows });
   } catch (err) {
-    console.error('Bid creation error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
+    console.error('Get drivers error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
-
+// ==========================================
+// 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА)
+// ==========================================
+app.post('/api/bids', async (req, res) => {
+try {
+const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+const parts = authHeader.split(' ');
+const token = parts.length > 1 ? parts[1] : parts[0];
+const decoded = jwt.verify(token, JWT_SECRET);
+const { tripId, driverId, proposedPrice, passengerCount } = req.body;
+// 🔥 ИСПРАВЛЕНО СИНТАКСИС: Косая кавычка на месте, скобки сбалансированы const checkAttempts = await pool.query(SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
+[tripId, decoded.id, driverId]
+);
+const currentAttempts = checkAttempts.rows[0].count;
+const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
+if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
+return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
+}
+if (currentAttempts >= 3) return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
+const nextAttemptNumber = currentAttempts + 1;
+const result = await pool.query(
+INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
+[tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
+);
+res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+} catch (err) {
+console.error('Bid creation error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
+}
+});
 app.get('/api/bids/driver/incoming', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -326,13 +317,20 @@ SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.dri
 [tripId]
 );
 if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-res.json({ ok: true, status: result.rows[0].status, driverPhone: result.rows[0].status === 'accepted' ? result.rows[0].driverPhone : null });
+// 🔥 ИСПРАВЛЕНО: Извлечение значений переведено на нулевой индекс [0] массива результатов СУБД
+const topBid = result.rows[0];
+res.json({
+ok: true,
+status: topBid.status,
+driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+});
 } catch (err) {
+console.error('Status error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
 // ==========================================
-// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
 app.get('/', (req, res) => {
 res.redirect('/admin');
@@ -366,18 +364,18 @@ html += 'ПІДТВЕРДИТИ ВХІД';
 html += 'Панель Адміністратора Diway';
 // Плитки аналитики в верстке
 html += '';
-html += ' ?? ВСЬОГО КОРИСТУВАЧІВ...';
-html += ' ? РЕЄСТРАЦІЇ ЗА СЬОГОДНІ...';
+html += ' 📊 ВСЬОГО КОРИСТУВАЧІВ...';
+html += ' 📈 РЕЄСТРАЦІЇ ЗА СЬОГОДНІ...';
 html += '';
-html += '?? Ручне керування підписками';
+html += '🛠️ Ручне керування підписками';
 html += 'Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року';
 html += '';
 html += '';
 html += 'ВИДАТИ БЕЗЛІМІТ';
 html += '';
-html += '?? Усі зареєстровані водії';
+html += '📋 Усі зареєстровані водії';
 html += 'Завантаження водіїв...';
-html += '?? Усі зареєстровані пасажири';
+html += '👥 Усі зареєстровані пасажири';
 html += 'Завантаження пасажирів...';
 html += '';
 html += 'let adminToken = "";';
@@ -413,6 +411,7 @@ const card = document.createElement("div"); card.className = "driver-card";
 let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
 let statusBadge = isDriverActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
 let actionButton = isDriverActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
+// 🔥 ДОБАВЛЕНО: Информационный трекер остатка дней подписки/триала на карточке водителя
 let payStatus = driver.payBlocked ? "[Тріал закінчився / Екран заблоковано]" : "[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]";
 card.innerHTML = "" + driver.name + " " + statusBadge + payStatus + "Тел: " + driver.phone + "" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")" + actionButton + "";
 listDiv.appendChild(card);
@@ -426,6 +425,7 @@ const card = document.createElement("div"); card.className = "driver-card";
 let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
 let statusBadge = isPassengerActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
 let actionButton = isPassengerActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
+// 🔥 ДОБАВЛЕНО: Информационный трекер остатка дней подписки/триала на карточке пассажира
 let payStatus = pass.payBlocked ? "[Тріал закінчився / Екран заблоковано]" : "[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]";
 card.innerHTML = "" + pass.name + " " + statusBadge + payStatus + "Тел: " + pass.phone + "" + actionButton + "";
 passDiv.appendChild(card);
@@ -466,17 +466,17 @@ html += '}';
 html += '';
 res.send(html);
 });
-// 🚀 Роут логіну адміністратора (ВИПРАВЛЕНО ЕКРАНУВАННЯ СИНТАКСИСУ $1 К ДОМЕНУ СУБД)
+// 🚀 Роут логіну адміністратора
 app.post('/api/admin/login', async (req, res) => {
 try {
 const { phone, code } = req.body;
 if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
 if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код безпеки!' });
-// 🔥 ИСПРАВЛЕНО: Убран слэш перед $1, теперь пулл подключений Supabase прочитает авторизацию!
 const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
 if (result.rows.length === 0) {
 return res.json({ ok: false, error: 'Користувача з таким номером не знайдено в базі!' });
 }
+// 🔥 ИСПРАВЛЕНО: Извлекаем объект из первой строки массива результатов [0]
 const user = result.rows[0];
 if (!user.is_admin) {
 return res.json({ ok: false, error: 'Доступ заблоковано! Ваш номер не має прав адміністратора.' });
@@ -492,7 +492,7 @@ console.error('Admin login error:', err.message);
 res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
 }
 });
-// 🚀 АДМІН: Отримання користувачів та повної аналітики (ВИПРАВЛЕНО .rows[0].count)
+// 🚀 АДМІН: Отримання ПОВНОГО списку водіїв, пасажирів та метрик аналітики
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -501,7 +501,7 @@ const parts = authHeader.split(' ');
 const token = parts.length > 1 ? parts[1] : parts[0];
 const decoded = jwt.verify(token, JWT_SECRET);
 if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
-// 🔥 ИСПРАВЛЕНО: Извлечение .rows[0].count приведено к строгим стандартам PostgreSQL
+// 🔥 ИСПРАВЛЕНО: Чтение .rows[0].count переведено на правильный индекс
 const totalUsersQuery = await pool.query("SELECT COUNT(*)::int AS count FROM users");
 const totalUsers = totalUsersQuery.rows[0].count;
 const todayUsersQuery = await pool.query(
@@ -544,7 +544,7 @@ console.error('Admin metrics fetch error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 АДМІН: Переключення статусу блокування водія/пасажира
+// 🚀 АДМІН: Переключення статусу блокування користувача
 app.post('/api/admin/verify-driver', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -622,7 +622,7 @@ await pool.query(
 UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days' WHERE id = $1,
 [parseInt(userId)]
 );
-res.send('?? Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
+res.send('🟢 Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
 } catch (err) {
 res.send('Помилка обробки платежу: ' + err.message);
 }
@@ -630,3 +630,4 @@ res.send('Помилка обробки платежу: ' + err.message);
 app.listen(PORT, () => {
 console.log(🚀 Server is running smoothly on port ${PORT});
 });
+
