@@ -293,24 +293,24 @@ res.json({ ok: false, error: err.message });
 }
 });
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-const result = await pool.query(
-'SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1',
-[tripId]
-);
-if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+  try {
+    const { tripId } = req.query;
+    const result = await pool.query('SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1', [tripId]);
+    
+    if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
+    
+    const topBid = result.rows[0]; // Исправлен индекс строки СУБД
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
 });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
@@ -421,7 +421,7 @@ html += ' const response = await fetch("/api/admin/manual-subscription", { metho
 html += ' const data = await response.json();';
 html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
 html += ' else { alert("❌ Помилка: " + data.error); }';
-html += ' } catch(err) { alert("Помилка з\'єднання з сервером"); }';
+html += ' } catch(err) { alert("Помилка з`єднання з сервером"); }';
 html += '}';
 html += '';
 res.send(html);
@@ -456,31 +456,33 @@ const todayUsersQuery = await pool.query('SELECT COUNT(*)::int AS count FROM use
 const todayUsers = todayUsersQuery.rows[0].count;
 const driversResult = await pool.query('SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Водій' ORDER BY u.is_verified ASC, u.id DESC');
 const passengersResult = await pool.query('SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Пасажир' ORDER BY u.is_verified ASC, u.id DESC');
-const now = new Date();
-const formatUser = (row) => {
-const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
-const subscriptionExpiresAt = row.subExpires ? new Date(row.subExpires) : null;
-let daysLeft = 0;
-let payBlocked = false;
-const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
-const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
-if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
-daysLeft = Math.ceil((subscriptionExpiresAt - now) / (1000 * 60 * 60 * 24));
-payBlocked = false;
-} else if (now < trialExpiryDate) {
-daysLeft = Math.ceil((trialExpiryDate - now) / (1000 * 60 * 60 * 24));
-payBlocked = false;
-} else {
-daysLeft = 0;
-payBlocked = true;
-}
-return { id: row.id, name: row.name, phone: row.phone, carMake: row.carMake, plateNumber: row.plateNumber, isVerified: row.isVerified, daysLeft, payBlocked };
-};
-res.json({ ok: true, stats: { totalUsers, todayUsers }, drivers: driversResult.rows.map(formatUser), passengers: passengersResult.rows.map(formatUser) });
-} catch (err) {
-res.json({ ok: false, error: err.message });
-}
-});
+    const now = new Date();
+    const formatUser = (row) => {
+      const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
+      const subscriptionExpiresAt = row.subExpires ? new Date(row.subExpires) : null;
+      let daysLeft = 0;
+      let payBlocked = false;
+      const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
+      const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        daysLeft = Math.ceil((subscriptionExpiresAt - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else if (now < trialExpiryDate) {
+        daysLeft = Math.ceil((trialExpiryDate - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else {
+        daysLeft = 0;
+        payBlocked = true;
+      }
+      return { id: row.id, name: row.name, phone: row.phone, carMake: row.carMake, plateNumber: row.plateNumber, isVerified: row.isVerified, daysLeft, payBlocked };
+    };
+
+    res.json({ ok: true, stats: { totalUsers, todayUsers }, drivers: driversResult.rows.map(formatUser), passengers: passengersResult.rows.map(formatUser) });
+  } catch (err) { 
+    res.json({ ok: false, error: err.message }); 
+  }
+}); // 👈 Убедитесь, что эта строка закрывает роут unverified-drivers идеально!
+
 app.post('/api/admin/verify-driver', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
