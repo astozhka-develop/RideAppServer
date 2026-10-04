@@ -533,7 +533,7 @@ alert("Помилка: " + data.error);
 alert("Помилка сервера");
 }
 }
-  // 🟢 ИСПРАВЛЕНО: Полностью очищен синтаксис функции ручного безлимита!
+    // 🟢 ИСПРАВЛЕНО: Закрывающие конструкции Express-ответа полностью сбалансированы
   html += 'async function grantManualSubscription() {';
   html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
   html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
@@ -549,7 +549,10 @@ alert("Помилка сервера");
   html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
   html += '}';
   
-});
+  html += '</script></body></html>';
+  res.send(html);
+}); // 👈 УБЕДИТЕСЬ, ЧТО ЗДЕСЬ СТОИТ ИМЕННО ТАКАЯ СВЯЗКА СКОБОК С ТОЧКОЙ С ЗАПЯТОЙ!
+
 
 // 🚀 Роут логіну адміністратора (ИСПРАВЛЕН ИНДЕКС СТРОКИ)
 app.post('/api/admin/login', async (req, res) => {
