@@ -605,8 +605,8 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
-// 🚀 Адмін логін на сторінці — ТОЧЕЧНОЕ ИСПРАВЛЕННОЕ ИЗВЛЕЧЕНИЕ ОБЪЕКТА ИЗ МАССИВА ROWS
-app.post('/api/admin/login', async (req, res) => {
+// 🚀 АДМІН-ЛОГІН: Точечно исправлено извлечение объекта [0] из массива результатов PostgreSQL!
+app.post('/api/admin/admin/login', async (req, res) => {
   try {
     const { phone, code } = req.body;
     if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
@@ -615,10 +615,10 @@ app.post('/api/admin/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
     if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     
-    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Берем именно нулевой элемент массива rows!
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Достаем именно ПЕРВЫЙ элемент из массива rows
     const user = result.rows[0];
     
-    // 🔥 ТЕПЕРЬ СВОЙСТВО ЧИТАЕТСЯ ИДЕАЛЬНО
+    // 🔥 ТЕПЕРЬ ПРОВЕРКА ФЛАГА СУБД СРАБОТАЕТ ИДЕАЛЬНО
     if (!user.is_admin) {
       return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
     }
@@ -627,9 +627,10 @@ app.post('/api/admin/login', async (req, res) => {
     res.json({ ok: true, token });
   } catch (err) { 
     console.error('Admin login error:', err.message);
-    res.json({ ok: false, error: err.message }); 
+    res.json({ ok: false, error: 'Помилка сервера авторизації: ' + err.message }); 
   }
 });
+
 
 // 🚀 ОБНОВЛЕННЫЙ АДМИН-ЭНДПОИНТ: Считает пользователей и выводит общую статистику
 app.get('/api/admin/unverified-drivers', async (req, res) => {
