@@ -284,20 +284,19 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pEndLat = parseFloat(endLat);
     const pEndLon = parseFloat(endLon);
     
-        // 🔥 ИСПРАВЛЕНО: Гарантированная фильтрация только активных (не забаненных) водителей
+            // 🔥 ИСПРАВЛЕНО: t.role = 'driver' (для таблицы поездок) и u.role = 'Водій' (для таблицы пользователей)
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
               u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
        FROM active_trips t
        JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'Водій' AND t.status = 'searching' AND u.is_verified = true
-         AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 50.0
-         AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 50.0`,
-      [pStartLat, pStartLon, pEndLat, pEndLon]
+       WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true
+       ORDER BY t.id DESC`
     );
-
+    
     res.json({ ok: true, drivers: result.rows });
+
   } catch (err) {
     console.error('Get drivers error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
