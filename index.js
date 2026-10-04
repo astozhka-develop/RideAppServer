@@ -680,7 +680,9 @@ app.post('/api/payment/create-invoice', async (req, res) => {
     const token = parts.length > 1 ? parts : parts;
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
+    // 🔥 НАДЕЖНЫЙ ВАРИАНТ: Обычные кавычки и оператор "+" гарантируют успешный запуск на Render без ошибок синтаксиса!
+    const testPaymentUrl = 'https://diway.onrender.com/payment/simulator?userId=' + decoded.id;
+
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
     console.error('Invoice creation error:', err.message);
