@@ -256,37 +256,42 @@ console.error('Get drivers error:', err.message);
 res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
 }
 });
-// ==========================================
-// 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА)
-// ==========================================
+// 🚀 БЛОК СТАВОК (ТОРГИ) — ИСПРАВЛЕНА СИНТАКСИЧЕСКАЯ КАВЫЧКА SQL ЗАПРОСА
 app.post('/api/bids', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-const token = authHeader.split(' ')[1];
-const decoded = jwt.verify(token, JWT_SECRET);
-const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-const checkAttempts = await pool.query(
-SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3,
-[tripId, decoded.id, driverId]
-);
-const currentAttempts = checkAttempts.rows[0].count;
-const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
-if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
-return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
-}
-if (currentAttempts >= 3) return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
-const nextAttemptNumber = currentAttempts + 1;
-const result = await pool.query(
-INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
-[tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
-);
-res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
-} catch (err) {
-console.error('Bid creation error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
-}
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    const parts = authHeader.split(' ');
+    const token = parts.length > 1 ? parts[1] : parts[0];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { tripId, driverId, proposedPrice, passengerCount } = req.body;
+    
+    // 🔥 ИСПРАВЛЕНО: Добавлен обратный апостроф ` перед текстом SELECT запроса!
+    const checkAttempts = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
+      [tripId, decoded.id, driverId]
+    );
+    
+    const currentAttempts = checkAttempts.rows[0].count;
+    const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [driverId]);
+    if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
+      return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
+    }
+    if (currentAttempts >= 3) return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
+    
+    const nextAttemptNumber = currentAttempts + 1;
+    const result = await pool.query(
+      `INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
+      [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
+    );
+    res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+  } catch (err) {
+    console.error('Bid creation error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
+  }
 });
+
 app.get('/api/bids/driver/incoming', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
