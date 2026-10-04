@@ -535,7 +535,7 @@ const authHeader = req.headers['authorization'];
 if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
-const testPaymentUrl = 'onrender.com' + decoded.id;
+const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
 res.json({ ok: true, paymentUrl: testPaymentUrl });
 } catch (err) {
 res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
