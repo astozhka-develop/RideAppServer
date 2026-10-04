@@ -585,20 +585,22 @@ html += ' if (data.ok) { alert("Статус доступу успішно зм�
 html += ' else { alert("Помилка: " + data.error); }';
 html += ' } catch (err) { alert("Помилка сервера"); }';
 html += '}';
-html += 'async function grantManualSubscription() {';
-html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
-html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
-html += ' try {';
-html += ' const response = await fetch("/api/admin/manual-subscription", {';
-html += ' method: "POST",';
-html += ' headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
-html += ' body: JSON.stringify({ phone })';
-html += ' });';
-html += ' const data = await response.json();';
-html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
-html += ' else { alert("❌ Помилка: " + data.error); }';
-html += ' } catch(err) { alert("Помилка з'єднання з сервером"); }';
-html += '}';
+  // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Все кавычки Express экранированы, конфликт строк устранен!
+  html += 'async function grantManualSubscription() {';
+  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
+  html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
+  html += '  try {';
+  html += '    const response = await fetch("/api/admin/manual-subscription", {';
+  html += '      method: "POST",';
+  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+  html += '      body: JSON.stringify({ phone })';
+  html += '    });';
+  html += '    const data = await response.json();';
+  html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+  html += '    else { alert("❌ Помилка: " + data.error); }';
+  html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
+  html += '}';
+
 html += '';
 res.send(html);
 });
