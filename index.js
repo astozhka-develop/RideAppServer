@@ -445,14 +445,14 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ С АНАЛИТИКОЙ)
 // ==========================================
 app.get('/admin', (req, res) => {
   let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
   html += '<title>Панель Admin Diway</title><style>';
   html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
   html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
-  html += '.dashboard-container{max-width:800px;margin:20px auto;display:none;}';
+  html += '.dashboard-container{max-width:850px;margin:20px auto;display:none;}';
   html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
   html += '.form-group{margin-bottom:20px;}';
   html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
@@ -463,6 +463,13 @@ app.get('/admin', (req, res) => {
   html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
   html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
   html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
+  
+  // 🔥 CSS СТИЛИ ДЛЯ ОКРЫТИЯ ПЛИТОК АНАЛИТИКИ
+  html += '.stats-row{display:flex; gap:20px; margin-bottom:24px;}';
+  html += '.stats-card{flex:1; background:#0D47A1; color:#FFF; padding:24px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.15);}';
+  html += '.stats-card.today{background:#10B981; box-shadow:0 8px 20px rgba(16,185,129,0.15);}';
+  html += '.stats-number{font-size:36px; font-weight:bold; margin-top:8px;}';
+  
   html += '</style></head><body>';
   html += '<div class="auth-container" id="authBlock"><h2>Вхід до Diway Admin</h2>';
   html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
@@ -470,16 +477,25 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
-  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками </h3>';
+  
+  // 🔥 ВИЗУАЛЬНЫЕ ОКНА АНАЛИТИКИ (Заполняются динамически скриптом)
+  html += '<div class="stats-row">';
+  html += '  <div class="stats-card"><div style="font-size:14px;font-weight:bold;opacity:0.9;">📊 ВСЬОГО КОРИСТУВАЧІВ</div><div class="stats-number" id="statTotalUsers">...</div></div>';
+  html += '  <div class="stats-card today"><div style="font-size:14px;font-weight:bold;opacity:0.9;">📈 РЕЄСТРАЦІЇ ЗА СЬОГОДНІ</div><div class="stats-number" id="statTodayUsers">...</div></div>';
+  html += '</div>';
+
+  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками</h3>';
   html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
   html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
   html += '<input type="text" id="targetUserPhone" placeholder="+380XXXXXXXXX" style="flex:1; height:48px;">';
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
-  html += '<h3>📋 Усі зареєстровані користувачі та керування доступом</h3>';
+  html += '<h3>📋 Усі зареєстровані водії</h3>';
+  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
+  
+  html += '<h3>👥 Усі зареєстровані пасажири</h3>';
   html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
-  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
   
   html += '<script>';
   html += 'let adminToken = "";';
@@ -494,7 +510,8 @@ app.get('/admin', (req, res) => {
   html += '    else { alert("Відмовлено: " + data.error); }';
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
-    // 🔥 ИСПРАВЛЕНО: Полный переход на шаблонные косые кавычки ` ` убирает любые конфликты экранирования!
+  
+  // 🔥 ФУНКЦИЯ ОТРИСОВКИ: Полный переход на косые кавычки для безопасности
   html += `async function loadUnverifiedDrivers() {
     try {
       const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });
@@ -506,85 +523,86 @@ app.get('/admin', (req, res) => {
         return;
       }
       
-            // ОТРИСОВКА ВОДИТЕЛЕЙ
+      // 📊 ПОДСТАВЛЯЕМ ЖИВЫЕ ЦИФРЫ В ОКНА АНАЛИТИКИ
+      if (data.stats) {
+        document.getElementById("statTotalUsers").innerText = data.stats.totalUsers;
+        document.getElementById("statTodayUsers").innerText = data.stats.todayUsers;
+      }
+      
+      // ОТРИСОВКА ВОДИТЕЛЕЙ С МОНИТОРИНГОМ ТРИАЛА
       const listDiv = document.getElementById("driversList");
       listDiv.innerHTML = "";
       if (data.drivers && data.drivers.length > 0) {
         data.drivers.forEach(driver => {
           const card = document.createElement("div"); card.className = "driver-card";
-          
-          // 🟢 ВСТАВЛЕНО: Строгое определение активности водителя
           let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
           
-          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки теперь переключаются на основе переменной isDriverActive
           let statusBadge = isDriverActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
           let actionButton = isDriverActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ</button>";
           
-          card.innerHTML = "<div class='driver-info'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class='badge'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
+          // Мониторинг оплаты водителя
+          let payStatus = driver.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]</span>" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]</span>";
+
+          card.innerHTML = "<div class='driver-info'><h3>" + driver.name + " " + statusBadge + payStatus + "</h3><p>Тел: " + driver.phone + "</p><p><span class='badge'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
           listDiv.appendChild(card);
         });
       } else { listDiv.innerHTML = "<div class='no-data'>Водіїв не знайдено.</div>"; }
       
-      // ОТРИСОВКА ПАССАЖИРОВ
+      // ОТРИСОВКА ПАССАЖИРОВ С МОНИТОРИНГОМ ТРИАЛА
       const passDiv = document.getElementById("passengersList");
       passDiv.innerHTML = "";
       if (data.passengers && data.passengers.length > 0) {
         data.passengers.forEach(pass => {
           const card = document.createElement("div"); card.className = "driver-card";
-          
-          // 🟢 ВСТАВЛЕНО: Строгое определение активности пассажира
           let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
           
-          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки пассажиров на основе переменной isPassengerActive
           let statusBadge = isPassengerActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
           let actionButton = isPassengerActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ</button>";
           
-          card.innerHTML = "<div class='driver-info'><h3>" + pass.name + " " + statusBadge + "</h3><p>Тел: " + pass.phone + "</p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
+          // Мониторинг оплаты пассажира
+          let payStatus = pass.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]</span>" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]</span>";
+
+          card.innerHTML = "<div class='driver-info'><h3>" + pass.name + " " + statusBadge + payStatus + "</h3><p>Тел: " + pass.phone + "</p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
           passDiv.appendChild(card);
         });
       } else { passDiv.innerHTML = "<div class='no-data'>Пасажирів не знайдено.</div>"; }
       
-    } catch (err) {
-
-      document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Критична помилка: " + err.message + "</div>";
-      document.getElementById("passengersList").innerHTML = "<div class='no-data'>-</div>";
-    }
-  };`;
-
-  
-  html += 'async function toggleDriverBlock(driverId, setActivate) {';
-  html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього водія?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього водія? Його радар буде вимкнено!");';
-  html += '  if (!confirmAction) return;';
-  html += '  try {';
-  html += '    const response = await fetch("/api/admin/verify-driver", {';
-  html += '      method: "POST",';
-  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
-  html += '      body: JSON.stringify({ driverId, activeStatus: setActivate })';
-  html += '    });';
-  html += '    const data = await response.json();';
-  html += '    if (data.ok) { alert(setActivate ? "Водія успішно розблоковано!" : "🔴 Водія успішно заблоковано в Supabase!"); loadUnverifiedDrivers(); }';
-  html += '    else { alert("Помилка: " + data.error); }';
-  html += '  } catch (err) { alert("Помилка сервера"); }';
-  html += '}';
-  
-  html += 'async function grantManualSubscription() {';
-  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
-  html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
-  html += '  try {';
-  html += '    const response = await fetch("/api/admin/manual-subscription", {';
-  html += '      method: "POST",';
-  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
-  html += '      body: JSON.stringify({ phone })';
-  html += '    });';
-  html += '    const data = await response.json();';
-  html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; }';
-  html += '    else { alert("❌ Помилка: " + data.error); }';
-  html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
-  html += '}';
-  
-  html += '</script></body></html>';
-  res.send(html);
+    } catch (err) { 
+document.getElementById("driversList").innerHTML = "Критична помилка: " + err.message + "";
+}
+};`;
+html += 'async function toggleDriverBlock(driverId, setActivate) {';
+html += ' let confirmAction = confirm(setActivate ? "Розблокувати цього користувача?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ користувача? Доступ до додатку перекриється!");';
+html += ' if (!confirmAction) return;';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/verify-driver", {';
+html += ' method: "POST",';
+html += ' headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+html += ' body: JSON.stringify({ driverId, activeStatus: setActivate })';
+html += ' });';
+html += ' const data = await response.json();';
+html += ' if (data.ok) { alert("Статус доступу успішно змінено в Supabase!"); loadUnverifiedDrivers(); }';
+html += ' else { alert("Помилка: " + data.error); }';
+html += ' } catch (err) { alert("Помилка сервера"); }';
+html += '}';
+html += 'async function grantManualSubscription() {';
+html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
+html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/manual-subscription", {';
+html += ' method: "POST",';
+html += ' headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+html += ' body: JSON.stringify({ phone })';
+html += ' });';
+html += ' const data = await response.json();';
+html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+html += ' else { alert("❌ Помилка: " + data.error); }';
+html += ' } catch(err) { alert("Помилка з'єднання з сервером"); }';
+html += '}';
+html += '';
+res.send(html);
 });
+
 
 // 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
 app.post('/api/admin/login', async (req, res) => {
@@ -606,48 +624,86 @@ app.post('/api/admin/login', async (req, res) => {
   } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 
-// 🚀 АДМІН: Отримання ПОВНОГО списку водіїв та пасажирів (ВСЕЯДНИЙ ДЛЯ ВЕБ І АНДРОЇД)
+// 🚀 АДМІН: Отримання користувачів та повної аналітики додатку (Загальна кількість та приріст за сьогодні)
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
     const parts = authHeader.split(' ');
-    
-    // 🔥 ИСПРАВЛЕНО: Еслиparts[1] существует (это веб-браузер с Bearer), берем его. Если нет (это Android) — берем чистый parts[0]!
     const token = parts.length > 1 ? parts[1] : parts[0];
-    
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 1. Витягуємо ВСІХ водіїв з бази
+    // 📊 АНАЛІТИКА 1: Загальна кількість користувачів в системі
+    const totalUsersQuery = await pool.query("SELECT COUNT(*)::int AS count FROM users");
+    const totalUsers = totalUsersQuery.rows[0].count;
+
+    // 📊 АНАЛІТИКА 2: Кількість нових реєстрацій за поточну добу (відштовхуючись від NOW())
+    const todayUsersQuery = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM users WHERE created_at >= CURRENT_DATE"
+    );
+    const todayUsers = todayUsersQuery.rows[0].count;
+
+    // 🟢 Витягуємо ВСІХ водіїв з бази
     const driversResult = await pool.query(`
-      SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
-      FROM users 
-      WHERE role = 'Водій' 
-      ORDER BY is_verified ASC, id DESC
+      SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified",
+             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
+      FROM users u
+      LEFT JOIN device_trials d ON u.device_id = d.device_id
+      WHERE u.role = 'Водій' 
+      ORDER BY u.is_verified ASC, u.id DESC
     `);
 
-    // 2. Витягуємо ВСІХ пасажирів з бази
+    // 🟢 Витягуємо ВСІХ пасажирів з бази
     const passengersResult = await pool.query(`
-      SELECT id, name, phone, is_verified AS "isVerified"
-      FROM users 
-      WHERE role = 'Пасажир' 
-      ORDER BY is_verified ASC, id DESC
+      SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified",
+             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
+      FROM users u
+      LEFT JOIN device_trials d ON u.device_id = d.device_id
+      WHERE u.role = 'Пасажир' 
+      ORDER BY u.is_verified ASC, u.id DESC
     `);
 
-    // Віддаємо на веб-сторінку обидва масиви даних
+    const now = new Date();
+    const formatUser = (row) => {
+      const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
+      const subscriptionExpiresAt = row.subExpires ? new Date(row.subExpires) : null;
+      let daysLeft = 0;
+      let payBlocked = false;
+
+      const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
+      const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
+
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        daysLeft = Math.ceil((subscriptionExpiresAt - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else if (now < trialExpiryDate) {
+        daysLeft = Math.ceil((trialExpiryDate - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else {
+        daysLeft = 0;
+        payBlocked = true;
+      }
+
+      return {
+        id: row.id, name: row.name, phone: row.phone, carMake: row.carMake, plateNumber: row.plateNumber,
+        isVerified: row.isVerified, daysLeft, payBlocked
+      };
+    };
+
+    // Повертаємо масиви та нові аналітичні лічильники
     res.json({ 
       ok: true, 
-      drivers: driversResult.rows,
-      passengers: passengersResult.rows
+      stats: { totalUsers, todayUsers },
+      drivers: driversResult.rows.map(formatUser),
+      passengers: passengersResult.rows.map(formatUser)
     });
   } catch (err) { 
-    console.error('Admin drivers fetch error:', err.message);
-    res.json({ ok: false, error: 'Помилка безпеки токена: ' + err.message }); 
+    console.error('Admin metrics fetch error:', err.message);
+    res.json({ ok: false, error: err.message }); 
   }
 });
-
 
 
 // 🚀 АДМІН: Переключення статусу блокування водія/пасажира (True / False) — ФІКС СИНТАКСИСУ СУБД
