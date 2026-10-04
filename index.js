@@ -671,24 +671,25 @@ res.json({ ok: false, error: err.message });
 // ==========================================
 // 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
 // ==========================================
+
 app.post('/api/payment/create-invoice', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts : parts;
+    // 🔥 ИСПРАВЛЕНО: Безопасное извлечение токена независимо от формата (Bearer или чистый)
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // 🔥 НАДЕЖНЫЙ ВАРИАНТ: Обычные кавычки и оператор "+" гарантируют успешный запуск на Render без ошибок синтаксиса!
-    const testPaymentUrl = 'https://diway.onrender.com/payment/simulator?userId=' + decoded.id;
-
+    const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
     console.error('Invoice creation error:', err.message);
     res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
   }
 });
+
 
 // 🚀 2. Веб-страница симулятора оплаты Monobank (Mono Pay)
 app.get('/payment/simulator', (req, res) => {
@@ -710,16 +711,20 @@ app.get('/payment/simulator', (req, res) => {
   res.send(html);
 });
 
-// 🚀 3. Симуляция Вебхука Monobank: Переведено на обычные кавычки для гарантированного запуска!
+// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { userId } = req.body;
     if (!userId) return res.send('Помилка: Не вказано ID користувача');
-    
-    // 🔥 ИСПРАВЛЕНО: Косые кавычки убраны. Одинарные кавычки экранированы через сложение строк!
-    const sqlQuery = 'UPDATE users SET subscription_expires_at = NOW() + INTERVAL \'30 days\' WHERE id = $1';
-    await pool.query(sqlQuery, [parseInt(userId)]);
-    
+
+    // Сдвигаем подписку вперед на 30 дней от текущего момента NOW()
+    await pool.query(
+      `UPDATE users 
+       SET subscription_expires_at = NOW() + INTERVAL '30 days' 
+       WHERE id = $1`,
+      [parseInt(userId)]
+    );
+
     res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів. Можете повернутися в додаток.</p></body></html>');
   } catch (err) {
     res.send('Помилка обробки платежу: ' + err.message);
@@ -728,9 +733,8 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 
 
 // ==========================================
-// 🚀 ЗАПУСКАЕМ СЕРВЕР (СТРОГИЙ СИНТАКСИС)
+// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
 // ==========================================
-// 🔥 ИСПРАВЛЕНО: Обратные косые кавычки полностью удалены! Обычные кавычки и "+" гарантируют запуск без сбоев синтаксиса.
 app.listen(PORT, () => {
-  console.log('🚀 Server is running smoothly on port ' + PORT);
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
