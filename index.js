@@ -582,7 +582,7 @@ app.get('/admin', (req, res) => {
 
 
 
-// 🚀 АДМІН-ЛОГІН: Исправлен URL-путь роутинга и извлечение rows[0]
+// 🚀 АДМІН-ЛОГІН: Точечное исправление всеядной проверки флага иrows
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { phone, code } = req.body;
@@ -592,14 +592,16 @@ app.post('/api/admin/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
     if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     
-    // 🔥 ИСПРАВЛЕНО: Извлекаем объект строго из первого элемента массива rows
     const user = result.rows[0];
     
-    // 🔥 Проверяем флаг администратора из Supabase
-    if (!user.is_admin) {
+    // 🔥 ВСЕЯДНАЯ ПРОВЕРКА: Проверяем флаг админа в любом формате (bool, string, int)
+    const isAdminUser = user.is_admin === true || user.is_admin === 'true' || user.is_admin === 1 || user.is_admin === '1';
+    
+    if (!isAdminUser) {
       return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
     }
 
+    // Вшиваем флаг isAdmin в токен
     const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
     res.json({ ok: true, token });
   } catch (err) { 
@@ -607,6 +609,7 @@ app.post('/api/admin/login', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера авторизації: ' + err.message }); 
   }
 });
+
 
 
 
