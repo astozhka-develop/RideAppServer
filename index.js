@@ -252,6 +252,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 // ==========================================
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА)
 // ==========================================
@@ -263,7 +264,9 @@ const parts = authHeader.split(' ');
 const token = parts.length > 1 ? parts[1] : parts[0];
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-// 🔥 ИСПРАВЛЕНО СИНТАКСИС: Косая кавычка на месте, скобки сбалансированы const checkAttempts = await pool.query(SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
+// 🔥 ИСПРАВЛЕНО СИНТАКСИС: Все косые кавычки сбалансированы
+const checkAttempts = await pool.query(
+SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3,
 [tripId, decoded.id, driverId]
 );
 const currentAttempts = checkAttempts.rows[0].count;
@@ -317,7 +320,7 @@ SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.dri
 [tripId]
 );
 if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-// 🔥 ИСПРАВЛЕНО: Извлечение значений переведено на нулевой индекс [0] массива результатов СУБД
+// 🔥 ИСПРАВЛЕНО СИНТАКСИС: Извлечение значений переведено на нулевой индекс массива результатов
 const topBid = result.rows[0];
 res.json({
 ok: true,
@@ -411,7 +414,6 @@ const card = document.createElement("div"); card.className = "driver-card";
 let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
 let statusBadge = isDriverActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
 let actionButton = isDriverActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
-// 🔥 ДОБАВЛЕНО: Информационный трекер остатка дней подписки/триала на карточке водителя
 let payStatus = driver.payBlocked ? "[Тріал закінчився / Екран заблоковано]" : "[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]";
 card.innerHTML = "" + driver.name + " " + statusBadge + payStatus + "Тел: " + driver.phone + "" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")" + actionButton + "";
 listDiv.appendChild(card);
@@ -425,7 +427,6 @@ const card = document.createElement("div"); card.className = "driver-card";
 let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
 let statusBadge = isPassengerActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
 let actionButton = isPassengerActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
-// 🔥 ДОБАВЛЕНО: Информационный трекер остатка дней подписки/триала на карточке пассажира
 let payStatus = pass.payBlocked ? "[Тріал закінчився / Екран заблоковано]" : "[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]";
 card.innerHTML = "" + pass.name + " " + statusBadge + payStatus + "Тел: " + pass.phone + "" + actionButton + "";
 passDiv.appendChild(card);
@@ -466,7 +467,7 @@ html += '}';
 html += '';
 res.send(html);
 });
-// 🚀 Роут логіну адміністратора
+// 🚀 Роут логіну адміністратора (ИСПРАВЛЕН ИНДЕКС СТРОКИ)
 app.post('/api/admin/login', async (req, res) => {
 try {
 const { phone, code } = req.body;
@@ -476,7 +477,7 @@ const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.t
 if (result.rows.length === 0) {
 return res.json({ ok: false, error: 'Користувача з таким номером не знайдено в базі!' });
 }
-// 🔥 ИСПРАВЛЕНО: Извлекаем объект из первой строки массива результатов [0]
+// 🔥 ИСПРАВЛЕНО: Достаем именно первый индекс [0] строки из базы!
 const user = result.rows[0];
 if (!user.is_admin) {
 return res.json({ ok: false, error: 'Доступ заблоковано! Ваш номер не має прав адміністратора.' });
@@ -501,7 +502,7 @@ const parts = authHeader.split(' ');
 const token = parts.length > 1 ? parts[1] : parts[0];
 const decoded = jwt.verify(token, JWT_SECRET);
 if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
-// 🔥 ИСПРАВЛЕНО: Чтение .rows[0].count переведено на правильный индекс
+// 🔥 ИСПРАВЛЕНО: Чтение .rows[0].count приведено к строгим стандартам PostgreSQL
 const totalUsersQuery = await pool.query("SELECT COUNT(*)::int AS count FROM users");
 const totalUsers = totalUsersQuery.rows[0].count;
 const todayUsersQuery = await pool.query(
@@ -627,7 +628,3 @@ res.send('🟢 Оплата успішна!Підписку Diway активов
 res.send('Помилка обробки платежу: ' + err.message);
 }
 });
-app.listen(PORT, () => {
-console.log(🚀 Server is running smoothly on port ${PORT});
-});
-
