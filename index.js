@@ -468,16 +468,14 @@ app.get('/admin', (req, res) => {
   html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
   html += '</style></head><body>';
   
-  // 1. Окно авторизации
   html += '<div class="auth-container" id="authBlock"><h2>Вхід до Diway Admin</h2>';
   html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
   html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="password" id="adminCode" placeholder="777999" style="text-align:center;font-weight:bold;"></div>';
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
-  // 2. Главный скрытый контейнер дашборда (Открывается строго после успешного логина)
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
   
-  // Плашки живой статистики (Находятся строго внутри dashboardBlock)
+  // Окна-плашки для вывода статистики
   html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
   html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center;">';
   html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО КОРИСТУВАЧІВ</div>';
@@ -498,7 +496,7 @@ app.get('/admin', (req, res) => {
 
   html += '<h3>📋 Керування доступом водіїв</h3><div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
   html += '<h3>👥 Керування доступом пасажирів</h3><div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div>';
-  html += '</div>'; // 🔥 Единственный и финальный закрывающий тег dashboardBlock!
+  html += '</div>';
   
   html += '<script>';
   html += 'let adminToken = "";';
@@ -514,14 +512,13 @@ app.get('/admin', (req, res) => {
   html += '      adminToken = data.token;';
   html += '      document.getElementById("authBlock").style.display = "none";';
   html += '      document.getElementById("dashboardBlock").style.display = "block";';
-  // Переключаем отображение блоков статистики на flex, чтобы они выстроились в ряд
-  html += '      document.getElementById("dashboardBlock").style.display = "block";';
-  html += '      loadUnverifiedDrivers();';
+  html += '      loadUnverifiedDrivers();'; // 🔥 Вызывается строго ПОСЛЕ получения токена!
   html += '    } else { alert("Відмовлено: " + data.error); }';
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
   
   html += 'async function loadUnverifiedDrivers() {';
+  html += '  if(!adminToken) return;'; // 🔥 ДОБАВЛЕНО: Защита от холостого вызова при старте страницы!
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
@@ -562,23 +559,26 @@ app.get('/admin', (req, res) => {
   html += '  try {';
   html += '    const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId, activeStatus: setActivate }) });';
   html += '    const data = await response.json();';
-  html += '    if (data.ok) { alert("Статус доступу успішно змінено!"); loadUnverifiedDrivers(); }';
+  html += '    if (data.ok) { alert("Статус доступу успешно изменено!"); loadUnverifiedDrivers(); }';
   html += '    else { alert("Помилка: " + data.error); }';
-  html += ' } catch (err) { alert("Помилка сервера"); }';
+  html += '  } catch (err) { alert("Помилка сервера"); }';
   html += '}';
+  
   html += 'async function grantManualSubscription() {';
-  html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
-  html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
-  html += ' try {';
-  html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
-  html += ' const data = await response.json();';
-  html += ' if(data.ok) { alert("Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
-  html += ' else { alert("Помилка: " + data.error); }';
-  html += ' } catch(err) { alert("Помилка зєднання з сервером"); }';
-  html += '}';
-  html += '';
-  res.send(html);
-  });
+  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
+html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
+html += ' const data = await response.json();';
+html += ' if(data.ok) { alert("Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+html += ' else { alert("Помилка: " + data.error); }';
+html += ' } catch(err) { alert("Помилка зєднання з сервером"); }';
+html += '}';
+html += '';
+res.send(html);
+});
+
+
 
 
 
