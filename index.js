@@ -480,6 +480,18 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
+  // 🔥 ДОБАВЛЕНО: Визуальные окна-плашки для вывода статистики
+  html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
+  html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.15);">';
+  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО КОРИСТУВАЧІВ</div>';
+  html += '    <div id="statTotalUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
+  html += '  </div>';
+  html += '  <div style="flex:1; background:#10B981; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(16,185,129,0.15);">';
+  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📈 НОВИХ ЗА СЬОГОДНІ</div>';
+  html += '    <div id="statTodayUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
+  html += '  </div>';
+  html += '</div>';
+
   html += '<h3>📋 Усі зареєстровані користувачі та керування доступом</h3>';
   html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
   html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
@@ -502,6 +514,10 @@ app.get('/admin', (req, res) => {
     try {
       const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });
       const data = await response.json();
+      // 🔥 ДОБАВЛЕНО: Вывод цифр в созданные окна
+      document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;
+      document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;
+  }
       
       if (!data.ok) {
         document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Помилка сервера: " + data.error + "</div>";
@@ -615,21 +631,25 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
-// 🚀 АДМІН: Отримання ПОВНОГО списку водіїв та пасажирів (ВСЕЯДНИЙ ДЛЯ ВЕБ І АНДРОЇД)
+// 🚀 ОБНОВЛЕННЫЙ АДМИН-ЭНДПОИНТ: Считает пользователей и выводит общую статистику
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
     const parts = authHeader.split(' ');
-    
-    // 🔥 ИСПРАВЛЕНО: Еслиparts[1] существует (это веб-браузер с Bearer), берем его. Если нет (это Android) — берем чистый parts[0]!
     const token = parts.length > 1 ? parts[1] : parts[0];
-    
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 1. Витягуємо ВСІХ водіїв з бази
+    // 🔥 ДОБАВЛЕНО: SQL-подсчет общего числа зарегистрированных людей
+    const totalQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users');
+    const totalUsers = totalQuery.rows[0].count;
+
+    // 🔥 ДОБАВЛЕНО: SQL-подсчет регистраций за сегодняшний день (с 00:00 текущей даты)
+    const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users WHERE created_at >= CURRENT_DATE');
+    const todayUsers = todayQuery.rows[0].count;
+    
     const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
@@ -637,7 +657,6 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // 2. Витягуємо ВСІХ пасажирів з бази
     const passengersResult = await pool.query(`
       SELECT id, name, phone, is_verified AS "isVerified"
       FROM users 
@@ -645,17 +664,22 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // Віддаємо на веб-сторінку обидва масиви даних
+    // Отдаем массивы вместе со сформированным объектом stats
     res.json({ 
       ok: true, 
+      stats: {
+        totalUsers: totalUsers,
+        todayUsers: todayUsers
+      },
       drivers: driversResult.rows,
       passengers: passengersResult.rows
     });
   } catch (err) { 
     console.error('Admin drivers fetch error:', err.message);
-    res.json({ ok: false, error: 'Помилка безпеки токена: ' + err.message }); 
+    res.json({ ok: false, error: 'Помилка сервера статистики: ' + err.message }); 
   }
 });
+
 
 
 
@@ -772,25 +796,27 @@ app.get('/payment/simulator', (req, res) => {
   res.send(html);
 });
 
-// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
+// 🚀 ОБНОВЛЕННЫЙ ВЕБХУК: Автоматически продлевает подписку И разблокирует пользователя!
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { userId } = req.body;
     if (!userId) return res.send('Помилка: Не вказано ID користувача');
 
-    // Сдвигаем подписку вперед на 30 дней от текущего момента NOW()
+    // 🔥 ИСПРАВЛЕНО: Одновременно сдвигаем подписку на 30 дней И включаем is_verified = true, чтобы снять блок!
     await pool.query(
       `UPDATE users 
-       SET subscription_expires_at = NOW() + INTERVAL '30 days' 
+       SET subscription_expires_at = NOW() + INTERVAL '30 days',
+           is_verified = true 
        WHERE id = $1`,
       [parseInt(userId)]
     );
 
-    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів. Можете повернутися в додаток.</p></body></html>');
+    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів, аккаунт верифіковано. Можете повернутися в додаток.</p></body></html>');
   } catch (err) {
     res.send('Помилка обробки платежу: ' + err.message);
   }
 });
+
 
 
 // ==========================================
