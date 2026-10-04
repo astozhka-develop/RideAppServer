@@ -568,7 +568,7 @@ app.get('/admin', (req, res) => {
   html += ' const data = await response.json();';
   html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
   html += ' else { alert("❌ Помилка: " + data.error); }';
-  html += ' } catch(err) { alert("Помилка з'єднання з сервером"); }';
+  html += ' } catch(err) { alert("Помилка дзвінка на сервер"); }';
   html += '}';
   html += '';
   res.send(html);
