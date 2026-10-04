@@ -606,25 +606,44 @@ res.send(html);
 });
 
 
-// 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
+// 🚀 ЛОГІН АДМІНІСТРАТОРА — ІСПРАВЛЕНО ЕКРАНУВАННЯ СИНТАКСИСУ ПАРАМЕТРІВ СУБД
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { phone, code } = req.body;
-    if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
-    const result = await pool.query('SELECT * FROM users WHERE phone = \$1', [phone]);
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
-    
-    const user = result.rows[0];
-    
-    // 🔥 ІСПРАВЛЕНО: Читаємо прапорець адміна строго з підкресленням із бази даних!
-    if (!user.is_admin) {
-      return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
+    if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
+
+    // 1. Перевіряємо захисний 2FA мастер-код доступу
+    if (code !== '777999') {
+      return res.json({ ok: false, error: 'Невірний 2FA код безпеки!' });
     }
 
-    const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
+    // 🔥 ІСПРАВЛЕНО: Видалено зворотний слэш перед $1, тепер запит до Supabase пройде успішно!
+    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
+    if (result.rows.length === 0) {
+      return res.json({ ok: false, error: 'Користувача з таким номером не знайдено в базі!' });
+    }
+
+    const user = result.rows[0];
+
+    // 3. Жорстка перевірка на права адміністратора системи
+    if (!user.is_admin) {
+      return res.json({ ok: false, error: 'Доступ заблоковано! Ваш номер телефону не має прав адміністратора.' });
+    }
+
+    // 4. Генеруємо захищений токен адміна
+    const token = jwt.sign(
+      { id: user.id, role: 'admin', isAdmin: true }, 
+      JWT_SECRET, 
+      { expiresIn: '2h' }
+    );
+
     res.json({ ok: true, token });
-  } catch (err) { res.json({ ok: false, error: err.message }); }
+  } catch (err) {
+    console.error('Admin login error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
+  }
 });
+
 
 // 🚀 АДМІН: Отримання користувачів та повної аналітики додатку (Загальна кількість та приріст за сьогодні)
 app.get('/api/admin/unverified-drivers', async (req, res) => {
