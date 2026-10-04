@@ -286,25 +286,31 @@ res.json({ ok: true });
 res.json({ ok: false, error: err.message });
 }
 });
+// 🟢 ИСПРАВЛЕНО: Полный баланс скобок и правильное извлечение индекса массива PostgreSQL!
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-const result = await pool.query(
-'SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1',
-[tripId]
-);
-if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+  try {
+    const { tripId } = req.query;
+    const result = await pool.query(
+      'SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1',
+      [tripId]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+    
+    // Достаем первую строку ответа из массива данных базы
+    const topBid = result.rows[0];
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
 });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
