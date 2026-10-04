@@ -533,34 +533,24 @@ alert("Помилка: " + data.error);
 alert("Помилка сервера");
 }
 }
-async function grantManualSubscription() {
-const phone = document.getElementById("targetUserPhone").value.trim();
-if(!phone) { alert("Введіть номер телефону!"); return; }
-try {
-const response = await fetch("/api/admin/manual-subscription", {
-method: "POST",
-headers: {
-"Content-Type": "application/json",
-"Authorization": "Bearer " + adminToken
-},
-body: JSON.stringify({ phone })
-});
-const data = await response.json();
-if(data.ok) {
-alert("🟢 Тестовий безліміт успішно активовано до 2050 року!");
-document.getElementById("targetUserPhone").value = "";
-loadUnverifiedDrivers();
-} else {
-alert("❌ Помилка: " + data.error);
-}
-} catch(err) {
-alert("Помилка з'єднання з сервером");
-}
-}
-
-
-`;
-res.send(html);
+  // 🟢 ИСПРАВЛЕНО: Полностью очищен синтаксис функции ручного безлимита!
+  html += 'async function grantManualSubscription() {';
+  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
+  html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
+  html += '  try {';
+  html += '    const response = await fetch("/api/admin/manual-subscription", {';
+  html += '      method: "POST",';
+  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
+  html += '      body: JSON.stringify({ phone })';
+  html += '    });';
+  html += '    const data = await response.json();';
+  html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+  html += '    else { alert("❌ Помилка: " + data.error); }';
+  html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
+  html += '}';
+  
+  html += '</script></body></html>';
+  res.send(html);
 });
 
 // 🚀 Роут логіну адміністратора (ИСПРАВЛЕН ИНДЕКС СТРОКИ)
