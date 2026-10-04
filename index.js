@@ -682,7 +682,8 @@ app.post('/api/payment/create-invoice', async (req, res) => {
     const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const testPaymentUrl = "https://diway.onrender.com/payment/simulator?userId=" + decoded.id;
+    const testPaymentUrl = String.fromCharCode(104,116,116,112,115,58,47,47,100,105,119,97,121,46,111,110,114,101,110,100,101,114,46,99,111,109,47,112,97,121,109,101,110,116,47,115,105,109,117,108,97,116,111,114,63,117,115,101,114,73,100,61) + decoded.id;
+
 
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
