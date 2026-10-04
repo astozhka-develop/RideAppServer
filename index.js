@@ -473,15 +473,16 @@ app.get('/admin', (req, res) => {
   html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="password" id="adminCode" placeholder="777999" style="text-align:center;font-weight:bold;"></div>';
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Исправлена вложенность тегов </div> и склейка строк
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
   
-  // Визуальные окна-плашки для вывода статистики
+  // Плашки живой статистики
   html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
-  html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.15);">';
+  html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center;">';
   html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО КОРИСТУВАЧІВ</div>';
   html += '    <div id="statTotalUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
   html += '  </div>';
-  html += '  <div style="flex:1; background:#10B981; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(16,185,129,0.15);">';
+  html += '  <div style="flex:1; background:#10B981; color:#FFF; padding:20px; border-radius:16px; text-align:center;">';
   html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📈 НОВИХ ЗА СЬОГОДНІ</div>';
   html += '    <div id="statTodayUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
   html += '  </div>';
@@ -494,8 +495,10 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
+  // 🔥 Лишние закрывающие </div> удалены, теперь разметка не ломает дерево скриптов!
   html += '<h3>📋 Керування доступом водіїв</h3><div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
-  html += '<h3>👥 Керування доступом пасажирів</h3><div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
+  html += '<h3>👥 Керування доступом пасажирів</h3><div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div>';
+  html += '</div>'; // Закрываем сам dashboardBlock один раз в конце!
   
   html += '<script>';
   html += 'let adminToken = "";';
@@ -511,20 +514,14 @@ app.get('/admin', (req, res) => {
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
   
-    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Полностью изолированные стандартные строки JavaScript фронтенда
+  // 🔥 Косые кавычки заменены на стандартное сложение строк Node.js без конфликтов экранирования
   html += 'async function loadUnverifiedDrivers() {';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
-  html += '    if (!data.ok) { alert("Помилка завантаження: " + data.error); return; }';
-  
-  // Обновление окон живой статистики в админке
-  html += '    if (data.stats) {';
-  html += '      document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;';
-  html += '      document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;';
-  html += '    }';
-  
-  // Отрисовка карточек водителей
+  html += '    if (!data.ok) { alert("Помилка сервера: " + data.error); return; }';
+  html += '    document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;';
+  html += '    document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;';
   html += '    const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";';
   html += '    if (data.drivers && data.drivers.length > 0) {';
   html += '      data.drivers.forEach(driver => {';
@@ -532,12 +529,10 @@ app.get('/admin', (req, res) => {
   html += '        let isDriverActive = driver.isVerified === true || driver.isVerified === "true" || driver.isVerified === 1;';
   html += '        let statusBadge = isDriverActive ? "<span class=\'badge\' style=\'background:#D1FAE5; color:#065F46;\'>Активний</span>" : "<span class=\'badge\' style=\'background:#FEE2E2; color:#991B1B;\'>ЗАБЛОКОВАНИЙ</span>";';
   html += '        let actionButton = isDriverActive ? "<button class=\'btn-approve\' style=\'background-color:#EF4444;\' onclick=\'toggleDriverBlock(" + driver.id + ", false)\'>ЗАБЛОКУВАТИ</button>" : "<button class=\'btn-approve\' style=\'background-color:#10B981;\' onclick=\'toggleDriverBlock(" + driver.id + ", true)\'>РОЗБЛОКУВАТИ</button>";';
-  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'></p></div><div class=\'actions\'>" + actionButton + "</div>";';
+  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class=\'actions\'>" + actionButton + "</div>";';
   html += '        listDiv.appendChild(card);';
   html += '      });';
   html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено.</div>"; }';
-  
-  // Отрисовка карточек пассажиров
   html += '    const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";';
   html += '    if (data.passengers && data.passengers.length > 0) {';
   html += '      data.passengers.forEach(pass => {';
@@ -549,8 +544,9 @@ app.get('/admin', (req, res) => {
   html += '        passDiv.appendChild(card);';
   html += '      });';
   html += '    } else { passDiv.innerHTML = "<div class=\'no-data\'>Пасажирів не знайдено.</div>"; }';
-  html += '  } catch (err) { console.error(err); }';
+  html += '  } catch (err) { alert("Помилка завантаження даних"); }';
   html += '}';
+
 
   
   html += 'async function toggleDriverBlock(driverId, setActivate) {';
