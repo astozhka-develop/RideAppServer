@@ -447,14 +447,14 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
-  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками (Для тестування)</h3>';
+  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками </h3>';
   html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
   html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
   html += '<input type="text" id="targetUserPhone" placeholder="+380XXXXXXXXX" style="flex:1; height:48px;">';
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
-  html += '<h3>📋 Усі зареєстровані водії та керування доступом</h3>';
+  html += '<h3>📋 Усі зареєстровані користувачі та керування доступом</h3>';
   html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
   html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
   
