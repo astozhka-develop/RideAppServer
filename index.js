@@ -614,18 +614,35 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
 
 
 
-// Админ: Одобрить водителя
+// 🚀 АДМІН: Переключення статусу блокування водія/пасажира (True / False) — ФІКС СИНТАКСИСУ СУБД
 app.post('/api/admin/verify-driver', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader.split(' ')[1];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const parts = authHeader.split(' ');
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Заборонено' });
-    const { driverId } = req.body;
-    await pool.query('UPDATE users SET is_verified = true WHERE id = $1', [driverId]);
+
+    const { driverId, activeStatus } = req.body;
+    
+    // 🔥 ИСПРАВЛЕНО: Явно приводим activeStatus к булевому типу JavaScript (true/false) перед отправкой в Supabase
+    const finalStatus = activeStatus === true || activeStatus === 'true';
+    
+    // 🔥 ИСПРАВЛЕНО: Запрос строго обновляет колонку is_verified, принудительно передавая булев флаг
+    await pool.query(
+      'UPDATE users SET is_verified = $1 WHERE id = $2', 
+      [finalStatus, parseInt(driverId)]
+    );
+    
     res.json({ ok: true });
-  } catch (err) { res.json({ ok: false, error: err.message }); }
+  } catch (err) { 
+    console.error('Verify driver error:', err.message);
+    res.json({ ok: false, error: err.message }); 
+  }
 });
+
 
 // 🚀 АДМІН: Ручне нарахування безлімітного доступу тестовим смартфонам по номеру телефону
 app.post('/api/admin/manual-subscription', async (req, res) => {
