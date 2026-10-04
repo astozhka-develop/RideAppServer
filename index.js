@@ -677,10 +677,10 @@ app.post('/api/payment/create-invoice', async (req, res) => {
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
+    const token = parts.length > 1 ? parts : parts;
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const testPaymentUrl = `https://onrender.com{decoded.id}`;
+    const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
     res.json({ ok: true, paymentUrl: testPaymentUrl });
   } catch (err) {
     console.error('Invoice creation error:', err.message);
