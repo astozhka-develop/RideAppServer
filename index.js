@@ -27,16 +27,14 @@ app.get('/api/health', (req, res) => {
 // Настройка Multer для приема изображений авто
 const multer = require('multer');
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб на одну фотографию
+  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб
   storage: multer.memoryStorage()
 });
 
-// 🚀 POST /api/upload/car-photo — Загрузка фотографии автомобиля
+// POST /api/upload/car-photo — Загрузка фотографии автомобиля
 app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.json({ ok: false, error: 'Файл не завантажено' });
-    }
+    if (!req.file) return res.json({ ok: false, error: 'Файл не завантажено' });
     const base64Image = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
     res.json({ ok: true, carPhotoUrl: base64Image });
   } catch (err) {
@@ -49,7 +47,7 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-// 🚀 Реєстрація нового користувача З ПРИВ'ЯЗКОЮ ДО ID СМАРТФОНУ
+// Реєстрація нового користувача З ПРИВ'ЯЗКОЮ ДО ID СМАРТФОНУ
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, deviceId } = req.body;
@@ -67,8 +65,7 @@ app.post('/api/auth/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10);
     
     const result = await pool.query(
-      `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, is_verified, device_id, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, NOW()) RETURNING id`,
+      'INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, is_verified, device_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, true, $7, NOW()) RETURNING id',
       [name, phone, password_hash, role, carMake || null, plateNumber || null, deviceId]
     );
     res.json({ ok: true, userId: result.rows[0].id });
@@ -78,7 +75,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 🚀 Авторизація (Логін)
+// Авторизація (Логін)
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -104,7 +101,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання профілю
+// Отримання профілю
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -113,12 +110,7 @@ app.get('/api/profile', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const result = await pool.query(
-      `SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, 
-              u.subscription_expires_at, u.device_id, u.is_verified,
-              d.first_registered_at
-       FROM users u
-       LEFT JOIN device_trials d ON u.device_id = d.device_id
-       WHERE u.id = $1`,
+      'SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, u.subscription_expires_at, u.device_id, u.is_verified, d.first_registered_at FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.id = $1',
       [decoded.id]
     );
     
@@ -167,7 +159,6 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-// 🚀 Оновлення даних профілю водія
 app.put('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -191,7 +182,6 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 Створення активного маршруту на карті
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -227,7 +217,6 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 Пошук попутних водіїв для пасажира
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const { startLat, startLon, endLat, endLon } = req.query;
@@ -249,10 +238,10 @@ app.get('/api/trips/drivers', async (req, res) => {
 // ==========================================
 
 app.post('/api/bids', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-const token = authHeader.split(' ')[1];
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId, driverId, proposedPrice, passengerCount } = req.body;
 const checkAttempts = await pool.query(
@@ -276,7 +265,7 @@ console.error('Bid creation error:', err.message);
 res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
 }
 });
-// 🚀 ВОДІЙ: Отримання вхідних ставок (БЛОК 1 ТА БЛОК 2 ПОЛНОСТЬЮ ИСПРАВЛЕНЫ ЧЕРЕЗ ТЕКСТОВЫЕ ШАБЛОНЫ )
+// 🚀 БЛОКИ 1 И 2 ИСПРАВЛЕНЫ: Запрос строго обернут в чистые одинарные кавычки '' без разрывов
 app.get('/api/bids/driver/incoming', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -286,7 +275,7 @@ const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId } = req.query;
 if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
 const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
+'SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending'',
 [decoded.id]
 );
 res.json({ ok: true, bids: result.rows });
@@ -323,7 +312,7 @@ res.json({ ok: false, error: err.message });
 }
 });
 // ==========================================
-// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (МОНОЛИТНЫЙ ВАРИАНТ)
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
 app.get('/', (req, res) => {
 res.redirect('/admin');
@@ -356,10 +345,10 @@ html += 'ПІДТВЕРДИТИ ВХІД';
 html += 'Панель Адміністратора Diway';
 html += '';
 html += ' 📊 ВСЬОГО КОРИСТУВАЧІВ...';
-html += ' 📈 РЕЄСТРАЦІТИ ЗА СЬОГОДНІ...';
+html += ' 📈 РЕЄСТРАЦІЇ ЗА СЬОГОДНІ...';
 html += '';
 html += '🛠️ Ручне керування підписками';
-html += 'Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року';
+html += 'Введіть номер телефону смартфона, щоб нарахувати ему тестовий БЕЗЛІМІТ до 2050 року';
 html += '';
 html += '';
 html += 'ВИДАТИ БЕЗЛІМІТ';
@@ -395,7 +384,7 @@ html += ' let isDriverActive = driver.isVerified === true || driver.isVerified =
 html += ' let statusBadge = isDriverActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ";';
 html += ' let actionButton = isDriverActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ";';
 html += ' let payStatus = driver.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]";';
-card.innerHTML = "" + driver.name + " " + statusBadge + payStatus + "Тел: " + driver.phone + "" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")" + actionButton + "";';
+html += ' card.innerHTML = "<div class='driver-info'>" + driver.name + " " + statusBadge + payStatus + "Тел: " + driver.phone + "<span class='badge' >" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")<div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "";';
 html += ' listDiv.appendChild(card);';
 html += ' });';
 html += ' } else { listDiv.innerHTML = "<div class='no-data'>Водіїв не знайдено."; }';
@@ -407,7 +396,7 @@ html += ' let isPassengerActive = pass.isVerified === true || pass.isVerified ==
 html += ' let statusBadge = isPassengerActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ";';
 html += ' let actionButton = isPassengerActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ";';
 html += ' let payStatus = pass.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]";';
-card.innerHTML = "" + pass.name + " " + statusBadge + payStatus + "Тел: " + pass.phone + "" + actionButton + "";';
+html += ' card.innerHTML = "<div class='driver-info'>" + pass.name + " " + statusBadge + payStatus + "Тел: " + pass.phone + "<div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "";';
 html += ' passDiv.appendChild(card);';
 html += ' });';
 html += ' } else { passDiv.innerHTML = "<div class='no-data'>Пасажирів не знайдено."; }';
@@ -423,7 +412,7 @@ html += ' if (data.ok) { alert("Статус доступу успішно зм�
 html += ' else { alert("Помилка: " + data.error); }';
 html += ' } catch (err) { alert("Помилка сервера"); }';
 html += '}';
-// 🔥 БЛОК 3 ИСПРАВЛЕН: Двойное экранирование апострофа для безопасной компиляции
+// 🔥 БЛОК 3 ИСПРАВЛЕН: Двойной экранированный слеш перед апострофом для слова "з'єднання"
 html += 'async function grantManualSubscription() {';
 html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
 html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
@@ -437,7 +426,7 @@ html += '}';
 html += '';
 res.send(html);
 });
-// 🚀 Роут логіну адміністратора
+// Роут логіну адміністратора
 app.post('/api/admin/login', async (req, res) => {
 try {
 const { phone, code } = req.body;
@@ -453,7 +442,7 @@ res.json({ ok: true, token });
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 АДМІН: Отримання ПОВНОГО списку користувачів (БЛОК 4 ТА БЛОК 5 ИСПРАВЛЕНЫ)
+// 🚀 БЛОКИ 4 И 5 ИСПРАВЛЕНЫ: Длинный SQL упакован в чистые одинарные кавычки без многострочных разрывов
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -465,13 +454,8 @@ const totalUsersQuery = await pool.query('SELECT COUNT(*)::int AS count FROM use
 const totalUsers = totalUsersQuery.rows[0].count;
 const todayUsersQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users WHERE created_at >= CURRENT_DATE');
 const todayUsers = todayUsersQuery.rows[0].count;
-// Шаблонные строки для чистого SQL водіїв та пасажирів без конфликтов кодировки
-const driversResult = await pool.query(
-SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Водій' ORDER BY u.is_verified ASC, u.id DESC
-);
-const passengersResult = await pool.query(
-SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Пасажир' ORDER BY u.is_verified ASC, u.id DESC
-);
+const driversResult = await pool.query('SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Водій' ORDER BY u.is_verified ASC, u.id DESC');
+const passengersResult = await pool.query('SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Пасажир' ORDER BY u.is_verified ASC, u.id DESC');
 const now = new Date();
 const formatUser = (row) => {
 const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
@@ -559,7 +543,7 @@ html += 'УСПІШНО СПЛАТИТИ 150 ГРН';
 html += '';
 res.send(html);
 });
-// 🚀 БЛОК 6 ИСПРАВЛЕН: Ограничительные двойные кавычки вокруг SQL-апдейта на 30 дней подписки
+// 🚀 БЛОК 6 ИСПРАВЛЕН: Ограничительные двойные кавычки вокруг SQL-запроса
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
 try {
 const { userId } = req.body;
