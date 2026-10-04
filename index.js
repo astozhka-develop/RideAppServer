@@ -284,146 +284,161 @@ res.json({ ok: false, error: err.message });
 }
 });
 app.post('/api/bids/respond', async (req, res) => {
-try {
-const { bidId, status } = req.body;
-await pool.query('UPDATE ride_bids SET status = $1 WHERE id = $2', [status, bidId]);
-res.json({ ok: true });
-} catch (err) {
-res.json({ ok: false, error: err.message });
-}
+  try {
+    const { bidId, status } = req.body;
+    await pool.query('UPDATE ride_bids SET status = $1 WHERE id = $2', [status, bidId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
+
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-const result = await pool.query('SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1', [tripId]);
-if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+  try {
+    const { tripId } = req.query;
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone" 
+       FROM ride_bids b 
+       JOIN users u ON b.driver_id = u.id 
+       WHERE b.trip_id = $1 
+       ORDER BY b.id DESC LIMIT 1`, 
+      [tripId]
+    );
+    if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
+    const topBid = result.rows[0];
+    res.json({
+      ok: true,
+      status: topBid.status,
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+    });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
 });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
 app.get('/', (req, res) => {
-res.redirect('/admin');
+  res.redirect('/admin');
 });
+
 app.get('/admin', (req, res) => {
-let html = '';
-html += 'Панель Admin Diway';
-html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
-html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
-html += '.dashboard-container{max-width:850px;margin:20px auto;display:none;}';
-html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
-html += '.form-group{margin-bottom:20px;}';
-html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
-html += 'input{width:100%;height:54px;padding:0 16px;border:1.5px solid #E0E0E0;border-radius:12px;font-size:16px;box-sizing:border-box;}';
-html += 'button{width:100%;height:56px;background-color:#0D47A1;color:#FFFFFF;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
-html += '.driver-card{background:#FFFFFF;border:1.5px solid #E0E0E0;border-radius:16px;padding:20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}';
-html += '.badge{display:inline-block;padding:4px 12px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-weight:bold;font-size:12px;}';
-html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
-html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
-html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
-html += '.stats-row{display:flex; gap:20px; margin-bottom:24px;}';
-html += '.stats-card{flex:1; background:#0D47A1; color:#FFF; padding:24px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.15);}';
-html += '.stats-card.today{background:#10B981; box-shadow:0 8px 20px rgba(16,185,129,0.15);}';
-html += '.stats-number{font-size:36px; font-weight:bold; margin-top:8px;}';
-html += '';
-html += 'Вхід до Diway Admin';
-html += 'Номер телефону';
-html += 'Код безпеки (2FA)';
-html += 'ПІДТВЕРДИТИ ВХІД';
-html += 'Панель Адміністратора Diway';
-html += '';
-html += ' 📊 ВСЬОГО КОРИСТУВАЧІВ...';
-html += ' 📈 РЕЄСТРАЦІЇ ЗА СЬОГОДНІ...';
-html += '';
-html += '🛠️ Ручне керування підписками';
-html += 'Введіть номер телефону смартфона, щоб нарахувати ему тестовий БЕЗЛІМІТ до 2050 року';
-html += '';
-html += '';
-html += 'ВИДАТИ БЕЗЛІМІТ';
-html += '';
-html += '📋 Усі зареєстровані водії';
-html += 'Завантаження водіїв...';
-html += '👥 Усі зареєстровані пасажири';
-html += 'Завантаження пасажирів...';
-html += '';
-html += 'let adminToken = "";';
-html += 'async function loginAdmin() {';
-html += ' const phone = document.getElementById("adminPhone").value.trim();';
-html += ' const code = document.getElementById("adminCode").value.trim();';
-html += ' if(!phone || !code) { alert("Заповніть всі поля!"); return; }';
-html += ' try {';
-html += ' const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });';
-html += ' const data = await response.json();';
-html += ' if (data.ok) { adminToken = data.token; document.getElementById("authBlock").style.display = "none"; document.getElementById("dashboardBlock").style.display = "block"; loadUnverifiedDrivers(); }';
-html += ' else { alert("Відмовлено: " + data.error); }';
-html += ' } catch (err) { alert("Помилка мережі при вході"); }';
-html += '}';
-html += 'async function loadUnverifiedDrivers() {';
-html += ' try {';
-html += ' const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
-html += ' const data = await response.json();';
-html += ' if (!data.ok) { document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Помилка сервера: " + data.error + ""; return; }';
-html += ' if (data.stats) { document.getElementById("statTotalUsers").innerText = data.stats.totalUsers; document.getElementById("statTodayUsers").innerText = data.stats.todayUsers; }';
-html += ' const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";';
-html += ' if (data.drivers && data.drivers.length > 0) {';
-html += ' data.drivers.forEach(driver => {';
-html += ' const card = document.createElement("div"); card.className = "driver-card";';
-html += ' let isDriverActive = driver.isVerified === true || driver.isVerified === "true" || driver.isVerified === 1;';
-html += ' let statusBadge = isDriverActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ";';
-html += ' let actionButton = isDriverActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ";';
-html += ' let payStatus = driver.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]";';
-html += ' card.innerHTML = "<div class='driver-info'>" + driver.name + " " + statusBadge + payStatus + "Тел: " + driver.phone + "<span class='badge'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")<div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "";';
-html += ' listDiv.appendChild(card);';
-html += ' });';
-html += ' } else { listDiv.innerHTML = "<div class='no-data'>Водіїв не знайдено."; }';
-html += ' const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";';
-html += ' if (data.passengers && data.passengers.length > 0) {';
-html += ' data.passengers.forEach(pass => {';
-html += ' const card = document.createElement("div"); card.className = "driver-card";';
-html += ' let isPassengerActive = pass.isVerified === true || pass.isVerified === "true" || pass.isVerified === 1;';
-html += ' let statusBadge = isPassengerActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ";';
-html += ' let actionButton = isPassengerActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ";';
-html += ' let payStatus = pass.payBlocked ? "<span style='color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;'>[Тріал закінчився / Екран заблоковано]" : "<span style='color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;'>[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]";';
-html += ' card.innerHTML = "<div class='driver-info'>" + pass.name + " " + statusBadge + payStatus + "Тел: " + pass.phone + "<div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "";';
+  let html = '';
+  html += '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Панель Admin Diway</title>';
+  html += '<style>';
+  html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
+  html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
+  html += '.dashboard-container{max-width:850px;margin:20px auto;display:none;}';
+  html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
+  html += '.form-group{margin-bottom:20px;}';
+  html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
+  html += 'input{width:100%;height:54px;padding:0 16px;border:1.5px solid #E0E0E0;border-radius:12px;font-size:16px;box-sizing:border-box;}';
+  html += 'button{width:100%;height:56px;background-color:#0D47A1;color:#FFFFFF;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
+  html += '.driver-card{background:#FFFFFF;border:1.5px solid #E0E0E0;border-radius:16px;padding:20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}';
+  html += '.badge{display:inline-block;padding:4px 12px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-weight:bold;font-size:12px;}';
+  html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
+  html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
+  html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
+  html += '.stats-row{display:flex; gap:20px; margin-bottom:24px;}';
+  html += '.stats-card{flex:1; background:#0D47A1; color:#FFF; padding:24px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.15);}';
+  html += '.stats-card.today{background:#10B981; box-shadow:0 8px 20px rgba(16,185,129,0.15);}';
+  html += '.stats-number{font-size:36px; font-weight:bold; margin-top:8px;}';
+  html += '</style></head><body>';
+  
+  html += '<div id="authBlock" class="auth-container">';
+  html += '<h2>Вхід до Diway Admin</h2>';
+  html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
+  html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="password" id="adminCode" placeholder="******"></div>';
+  html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
+  
+  html += '<div id="dashboardBlock" class="dashboard-container">';
+  html += '<h2>Панель Адміністратора Diway</h2>';
+  html += '<div class="stats-row">';
+  html += '<div class="stats-card"><div>📊 ВСЬОГО КОРИСТУВАЧІВ</div><div id="statTotalUsers" class="stats-number">0</div></div>';
+  html += '<div class="stats-card today"><div>📈 РЕЄСТРАЦІЇ ЗА СЬОГОДНІ</div><div id="statTodayUsers" class="stats-number">0</div></div>';
+  html += '</div>';
+  
+  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками</h3>';
+  html += '<p style="font-size:14px; color:#666;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
+  html += '<div style="display:flex; gap:10px;"><input type="text" id="targetUserPhone" placeholder="+380..." style="flex:1;">';
+  html += '<button onclick="grantManualSubscription()" style="width:200px;">ВИДАТИ БЕЗЛІМІТ</button></div></div>';
+  
+  html += '<h3>📋 Усі зареєстровані водії</h3><div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
+  html += '<h3>👥 Усі зареєстровані пасажири</h3><div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
+  
+  html += '<script>';
+  html += 'let adminToken = "";';
+  html += 'async function loginAdmin() {';
+  html += ' const phone = document.getElementById("adminPhone").value.trim();';
+  html += ' const code = document.getElementById("adminCode").value.trim();';
+  html += ' if(!phone || !code) { alert("Заповніть всі поля!"); return; }';
+  html += ' try {';
+  html += ' const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });';
+  html += ' const data = await response.json();';
+  html += ' if (data.ok) { adminToken = data.token; document.getElementById("authBlock").style.display = "none"; document.getElementById("dashboardBlock").style.display = "block"; loadUnverifiedDrivers(); }';
+  html += ' else { alert("Відмовлено: " + data.error); }';
+  html += ' } catch (err) { alert("Помилка мережі при вході"); }';
+  html += '}';
+  
+  html += 'async function loadUnverifiedDrivers() {';
+  html += ' try {';
+  html += ' const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
+  html += ' const data = await response.json();';
+  html += ' if (!data.ok) { document.getElementById("driversList").innerHTML = "<div class=\'no-data\' style=\'color:#EF4444;\'>Помилка сервера: " + data.error + "</div>"; return; }';
+  html += ' if (data.stats) { document.getElementById("statTotalUsers").innerText = data.stats.totalUsers; document.getElementById("statTodayUsers").innerText = data.stats.todayUsers; }';
+  html += ' const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";';
+  html += ' if (data.drivers && data.drivers.length > 0) {';
+  html += ' data.drivers.forEach(driver => {';
+  html += ' const card = document.createElement("div"); card.className = "driver-card";';
+  html += ' let isDriverActive = driver.isVerified === true || driver.isVerified === "true" || driver.isVerified === 1;';
+  html += ' let statusBadge = isDriverActive ? "<span class=\'badge\' style=\'background:#D1FAE5; color:#065F46;\'>Активний</span>" : "<span class=\'badge\' style=\'background:#FEE2E2; color:#991B1B;\'>ЗАБЛОКОВАНИЙ</span>";';
+  html += ' let actionButton = isDriverActive ? "<button class=\'btn-approve\' style=\'background-color:#EF4444;\' onclick=\'toggleDriverBlock(" + driver.id + ", false)\'>ЗАБЛОКУВАТИ</button>" : "<button class=\'btn-approve\' style=\'background-color:#10B981;\' onclick=\'toggleDriverBlock(" + driver.id + ", true)\'>РОЗБЛОКУВАТИ</button>";';
+  html += ' let payStatus = driver.payBlocked ? "<span style=\'color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;\'>[Тріал закінчився / Екран заблоковано]</span>" : "<span style=\'color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;\'>[Доступ активний. Залишилось: " + driver.daysLeft + " дн.]</span>";';
+  html += ' card.innerHTML = "<div class=\'driver-info\'><strong>" + driver.name + "</strong> " + statusBadge + payStatus + "<br><small>Тел: " + driver.phone + "</small> <span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></div><div class=\'actions\'>" + actionButton + "</div>";';
+  html += ' listDiv.appendChild(card);';
+  html += ' });';
+  html += ' } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено.</div>"; }';
+  
+  html += ' const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";';
+  html += ' if (data.passengers && data.passengers.length > 0) {';
+  html += ' data.passengers.forEach(pass => {';
+  html += ' const card = document.createElement("div"); card.className = "driver-card";';
+  html += ' let isPassengerActive = pass.isVerified === true || pass.isVerified === "true" || pass.isVerified === 1;';
+  html += ' let statusBadge = isPassengerActive ? "<span class=\'badge\' style=\'background:#D1FAE5; color:#065F46;\'>Активний</span>" : "<span class=\'badge\' style=\'background:#FEE2E2; color:#991B1B;\'>ЗАБЛОКОВАНИЙ</span>";';
+  html += ' let actionButton = isPassengerActive ? "<button class=\'btn-approve\' style=\'background-color:#EF4444;\' onclick=\'toggleDriverBlock(" + pass.id + ", false)\'>ЗАБЛОКУВАТИ</button>" : "<button class=\'btn-approve\' style=\'background-color:#10B981;\' onclick=\'toggleDriverBlock(" + pass.id + ", true)\'>РОЗБЛОКУВАТИ</button>";';
+  html += ' let payStatus = pass.payBlocked ? "<span style=\'color:#EF4444; font-weight:bold; font-size:12px; margin-left:10px;\'>[Тріал закінчився / Екран заблоковано]</span>" : "<span style=\'color:#10B981; font-weight:bold; font-size:12px; margin-left:10px;\'>[Доступ активний. Залишилось: " + pass.daysLeft + " дн.]</span>";';
+html += ' card.innerHTML = "<div class='driver-info'>" + pass.name + " " + statusBadge + payStatus + "
+Тел: " + pass.phone + "<div class='actions'>" + actionButton + "";';
 html += ' passDiv.appendChild(card);';
 html += ' });';
 html += ' } else { passDiv.innerHTML = "<div class='no-data'>Пасажирів не знайдено."; }';
 html += ' } catch (err) { document.getElementById("driversList").innerHTML = "Критична помилка: " + err.message; }';
 html += '}';
 html += 'async function toggleDriverBlock(driverId, setActivate) {';
-html += ' let confirmAction = confirm(setActivate ? "Розблокувати цього користувача?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ користувача? Доступ до додатку перекриється!");';
+html += ' let confirmAction = confirm(setActivate ? "Розблокирувати цього користувача?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ користувача?");';
 html += ' if (!confirmAction) return;';
 html += ' try {';
 html += ' const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId, activeStatus: setActivate }) });';
 html += ' const data = await response.json();';
-html += ' if (data.ok) { alert("Статус доступу успішно змінено в Supabase!"); loadUnverifiedDrivers(); }';
+html += ' if (data.ok) { alert("Статус доступу успішно змінено!"); loadUnverifiedDrivers(); }';
 html += ' else { alert("Помилка: " + data.error); }';
 html += ' } catch (err) { alert("Помилка сервера"); }';
 html += '}';
-// 🔥 БЛОК 3 ИСПРАВЛЕН: Двойной экранированный слеш перед апострофом для слова "з'єднання"
 html += 'async function grantManualSubscription() {';
 html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
 html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
 html += ' try {';
 html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
 html += ' const data = await response.json();';
-html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
 html += ' else { alert("❌ Помилка: " + data.error); }';
-html += ' } catch(err) { alert("Помилка з\'єднання з сервером"); }';
+html += ' } catch(err) { alert("Помилка з'єднання з сервером"); }';
 html += '}';
 html += '';
 res.send(html);
 });
-// Роут логіну адміністратора
 app.post('/api/admin/login', async (req, res) => {
 try {
 const { phone, code } = req.body;
@@ -439,7 +454,6 @@ res.json({ ok: true, token });
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 БЛОКИ 4 И 5 ИСПРАВЛЕНЫ: Длинный SQL упакован во внешние двойные кавычки "", изолируя одинарные кавычки в кириллице 'Водій'/'Пасажир'!
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -451,9 +465,12 @@ const totalUsersQuery = await pool.query('SELECT COUNT()::int AS count FROM user
 const totalUsers = totalUsersQuery.rows[0].count;
 const todayUsersQuery = await pool.query('SELECT COUNT()::int AS count FROM users WHERE created_at >= CURRENT_DATE');
 const todayUsers = todayUsersQuery.rows[0].count;
-// 🔥 ИСПРАВЛЕНО: Запросы обернуты во внешние двойные кавычки "", чтобы устранить падение AAPT2 / Node.js на кириллических ролях СУБД
-const driversResult = await pool.query("SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Водій' ORDER BY u.is_verified ASC, u.id DESC");
-const passengersResult = await pool.query("SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Пасажир' ORDER BY u.is_verified ASC, u.id DESC");
+const driversResult = await pool.query(
+SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Водій' ORDER BY u.is_verified ASC, u.id DESC
+);
+const passengersResult = await pool.query(
+SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified", u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg" FROM users u LEFT JOIN device_trials d ON u.device_id = d.device_id WHERE u.role = 'Пасажир' ORDER BY u.is_verified ASC, u.id DESC
+);
 const now = new Date();
 const formatUser = (row) => {
 const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
@@ -517,8 +534,7 @@ const authHeader = req.headers['authorization'];
 if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
 const token = authHeader.split(' ')[1];
 const decoded = jwt.verify(token, JWT_SECRET);
-// 🔥 ИСПРАВЛЕНО: Строка ссылки полностью очищена от шаблонных апострофов и использует надежный конкатенированный формат
-const testPaymentUrl = 'https://diway.onrender.com/payment/simulator?userId' + decoded.id;
+const testPaymentUrl = 'onrender.com' + decoded.id;
 res.json({ ok: true, paymentUrl: testPaymentUrl });
 } catch (err) {
 res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
@@ -528,28 +544,27 @@ app.get('/payment/simulator', (req, res) => {
 const userId = req.query.userId;
 let html = '';
 html += 'Monobank | Тестова Оплата';
+html += '';
 html += 'body{font-family:sans-serif;background-color:#FFF;margin:0;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh;}';
 html += '.card{max-width:400px;width:100%;border:2px solid #E0E0E0;padding:30px;border-radius:20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.05);}';
 html += 'h2{color:#FF1744;margin-bottom:10px;}';
 html += '.price{font-size:32px;font-weight:bold;margin:20px 0;color:#212121;}';
 html += 'button{width:100%;height:54px;background-color:#212121;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
 html += '';
-html += 'monobank | fono payТестова оплата підписки Diway';
+html += 'monobank | mono payТестова оплата підписки Diway';
 html += '150.00 ₴';
 html += '';
 html += '';
 html += 'УСПІШНО СПЛАТИТИ 150 ГРН';
-html += '';
 res.send(html);
 });
-// БЛОК 6 ИСПРАВЛЕН: Ограничительные двойные кавычки вокруг SQL-запроса подписки
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
 try {
 const { userId } = req.body;
 if (!userId) return res.send('Помилка: Не вказано ID користувача');
 const sqlQuery = "UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days' WHERE id = $1";
 await pool.query(sqlQuery, [parseInt(userId)]);
-res.send('🟢 Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
+res.send('🟢 Оплата успішна! Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
 } catch (err) {
 res.send('Помилка обробки платежу: ' + err.message);
 }
@@ -557,3 +572,4 @@ res.send('Помилка обробки платежу: ' + err.message);
 app.listen(PORT, () => {
 console.log('🚀 Server is running smoothly on port ' + PORT);
 });
+
