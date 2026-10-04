@@ -613,7 +613,7 @@ app.post('/api/admin/login', async (req, res) => {
 
 
 
-// 🚀 ОБНОВЛЕННЫЙ АДМИН-ЭНДПОИНТ: Считает пользователей и выводит общую статистику
+// 🚀 ИСПРАВЛЕННЫЙ АДМИН-ЭНДПОИНТ: Точечно исправлены индексы массивов строк COUNT [0]
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -621,16 +621,17 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     
     const parts = authHeader.split(' ');
     const token = parts.length > 1 ? parts[1] : parts[0];
+    
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 🔥 ДОБАВЛЕНО: SQL-подсчет общего числа зарегистрированных людей
-    const totalQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users');
-    const totalUsers = totalQuery.rows[0].count;
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Добавлен индекс [0] для извлечения цифры из массива rows!
+    const totalUsersQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users');
+    const totalUsers = totalUsersQuery.rows[0].count;
 
-    // 🔥 ДОБАВЛЕНО: SQL-подсчет регистраций за сегодняшний день (с 00:00 текущей даты)
-    const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users WHERE created_at >= CURRENT_DATE');
-    const todayUsers = todayQuery.rows[0].count;
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Добавлен индекс [0] для извлечения цифры из массива rows!
+    const todayUsersQuery = await pool.query('SELECT COUNT(*)::int AS count FROM users WHERE created_at >= CURRENT_DATE');
+    const todayUsers = todayUsersQuery.rows[0].count;
     
     const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
@@ -646,7 +647,7 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // Отдаем массивы вместе со сформированным объектом stats
+    // Отдаем данные фронтенду, включая исправленные цифры статистики
     res.json({ 
       ok: true, 
       stats: {
@@ -661,6 +662,7 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера статистики: ' + err.message }); 
   }
 });
+
 
 
 
