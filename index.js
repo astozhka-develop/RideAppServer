@@ -730,6 +730,7 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 // ==========================================
 // 🚀 ЗАПУСКАЕМ СЕРВЕР (СТРОГИЙ СИНТАКСИС)
 // ==========================================
+// 🔥 ИСПРАВЛЕНО: Обратные косые кавычки полностью удалены! Обычные кавычки и "+" гарантируют запуск без сбоев синтаксиса.
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running smoothly on port ${PORT}`);
+  console.log('🚀 Server is running smoothly on port ' + PORT);
 });
