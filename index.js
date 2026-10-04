@@ -122,7 +122,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 
-// 🚀 Отримання профілю — ІСПРАВЛЕНО СОПОСТАВЛЕННЯ СТРОК З LEFT JOIN
+// 🚀 Отримання профілю — ІСПРАВЛЕНО ВИБІРКУ КОЛОНКИ IS_VERIFIED
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -130,9 +130,10 @@ app.get('/api/profile', async (req, res) => {
     const token = authHeader.split(' ')[1]; 
     const decoded = jwt.verify(token, JWT_SECRET);
     
+    // 🔥 ДОБАВЛЕНО: u.is_verified в SELECT-запрос для проверки ручной блокировки!
     const result = await pool.query(
       `SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, 
-              u.subscription_expires_at, u.device_id,
+              u.subscription_expires_at, u.device_id, u.is_verified,
               d.first_registered_at
        FROM users u
        LEFT JOIN device_trials d ON u.device_id = d.device_id
@@ -153,22 +154,25 @@ app.get('/api/profile', async (req, res) => {
     const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
-    if (now < trialExpiryDate) {
+    if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+      const msLeft = subscriptionExpiresAt - now;
+      daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+      isBlocked = false;
+    } else if (now < trialExpiryDate) {
       const msLeft = trialExpiryDate - now;
       daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
       isBlocked = false;
     } else {
-      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
-        const msLeft = subscriptionExpiresAt - now;
-        daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
-        isBlocked = false;
-      } else {
-        daysLeft = 0;
-        isBlocked = true;
-      }
+      daysLeft = 0;
+      isBlocked = true;
     }
-    
-    // 🔥 ІСПРАВЛЕНО: Поля з LEFT JOIN переведені з snake_case у camelCase для Android Retrofit!
+
+    // 🔥 Проверяем ручную блокировку админом по колонке из Supabase
+    if (user.is_verified === false || user.is_verified === 'false') {
+      daysLeft = 0;
+      isBlocked = true;
+    }
+       
     res.json({ 
       ok: true, 
       user: {
@@ -187,6 +191,7 @@ app.get('/api/profile', async (req, res) => {
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
+
 
 
 // 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
@@ -247,6 +252,7 @@ app.post('/api/trips', async (req, res) => {
     );
     
     // 🔥 ИСПРАВЛЕНО: Извлекаем id строго из нулевого (первого) элемента массива строк PostgreSQL!
+       // Отправляем ID созданной поездки пассажира
     res.json({ ok: true, tripId: result.rows[0].id });
     
   } catch (err) {
@@ -255,7 +261,7 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 Поиск попутных водителей — СИНХРОНИЗАЦИЯ ТИПОВ С КЛИЕНТОМ (::int)
+// 🔥 ВОССТАНОВЛЕНО: Объявление роута поиска попутных водителей!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const { startLat, startLon, endLat, endLon } = req.query;
@@ -267,14 +273,13 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pEndLat = parseFloat(endLat);
     const pEndLon = parseFloat(endLon);
     
-    // 🔥 ИСПРАВЛЕНО: Добавлено ::int к t.user_id, чтобы PostgreSQL гарантированно отдавал число, а не строку!
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
               u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
        FROM active_trips t
        JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'driver' AND t.status = 'searching'
+       WHERE t.role = 'Водій' AND t.status = 'searching' AND u.is_verified = true
          AND calculate_distance($1, $2, t.start_lat, t.start_lon) <= 50.0
          AND calculate_distance($3, $4, t.end_lat, t.end_lon) <= 50.0`,
       [pStartLat, pStartLon, pEndLat, pEndLon]
@@ -285,6 +290,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 
 
 // ==========================================
@@ -309,6 +315,11 @@ app.post('/api/bids', async (req, res) => {
     
     // 🔥 ИСПРАВЛЕНО: Извлекаем count из первой строки [0] массива результатов!
     const currentAttempts = checkAttempts.rows[0].count;
+    // 🔥 ИСПРАВЛЕНО: Проверяем, не заблокирован ли водитель в Supabase прямо перед записью ставки!
+    const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
+    if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
+      return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
+    }
     if (currentAttempts >= 3) {
       return res.json({ 
         ok: false, 
