@@ -468,15 +468,16 @@ app.get('/admin', (req, res) => {
   html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
   html += '</style></head><body>';
   
+  // 1. Окно авторизации
   html += '<div class="auth-container" id="authBlock"><h2>Вхід до Diway Admin</h2>';
   html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
   html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="password" id="adminCode" placeholder="777999" style="text-align:center;font-weight:bold;"></div>';
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
-    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Исправлена вложенность тегов </div> и склейка строк
+  // 2. Главный скрытый контейнер дашборда (Открывается строго после успешного логина)
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
   
-  // Плашки живой статистики
+  // Плашки живой статистики (Находятся строго внутри dashboardBlock)
   html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
   html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center;">';
   html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО КОРИСТУВАЧІВ</div>';
@@ -495,13 +496,13 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
   html += '</div></div>';
 
-  // 🔥 Лишние закрывающие </div> удалены, теперь разметка не ломает дерево скриптов!
   html += '<h3>📋 Керування доступом водіїв</h3><div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
   html += '<h3>👥 Керування доступом пасажирів</h3><div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div>';
-  html += '</div>'; // Закрываем сам dashboardBlock один раз в конце!
+  html += '</div>'; // 🔥 Единственный и финальный закрывающий тег dashboardBlock!
   
   html += '<script>';
   html += 'let adminToken = "";';
+  
   html += 'async function loginAdmin() {';
   html += '  const phone = document.getElementById("adminPhone").value.trim();';
   html += '  const code = document.getElementById("adminCode").value.trim();';
@@ -509,19 +510,26 @@ app.get('/admin', (req, res) => {
   html += '  try {';
   html += '    const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });';
   html += '    const data = await response.json();';
-  html += '    if (data.ok) { adminToken = data.token; document.getElementById("authBlock").style.display = "none"; document.getElementById("dashboardBlock").style.display = "block"; loadUnverifiedDrivers(); }';
-  html += '    else { alert("Відмовлено: " + data.error); }';
+  html += '    if (data.ok) {';
+  html += '      adminToken = data.token;';
+  html += '      document.getElementById("authBlock").style.display = "none";';
+  html += '      document.getElementById("dashboardBlock").style.display = "block";';
+  // Переключаем отображение блоков статистики на flex, чтобы они выстроились в ряд
+  html += '      document.getElementById("dashboardBlock").style.display = "block";';
+  html += '      loadUnverifiedDrivers();';
+  html += '    } else { alert("Відмовлено: " + data.error); }';
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
   
-  // 🔥 Косые кавычки заменены на стандартное сложение строк Node.js без конфликтов экранирования
   html += 'async function loadUnverifiedDrivers() {';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
-  html += '    if (!data.ok) { alert("Помилка сервера: " + data.error); return; }';
+  html += '    if (!data.ok) { alert("Помилка завантаження списків: " + data.error); return; }';
+  
   html += '    document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;';
   html += '    document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;';
+  
   html += '    const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";';
   html += '    if (data.drivers && data.drivers.length > 0) {';
   html += '      data.drivers.forEach(driver => {';
@@ -533,6 +541,7 @@ app.get('/admin', (req, res) => {
   html += '        listDiv.appendChild(card);';
   html += '      });';
   html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено.</div>"; }';
+  
   html += '    const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";';
   html += '    if (data.passengers && data.passengers.length > 0) {';
   html += '      data.passengers.forEach(pass => {';
@@ -546,33 +555,31 @@ app.get('/admin', (req, res) => {
   html += '    } else { passDiv.innerHTML = "<div class=\'no-data\'>Пасажирів не знайдено.</div>"; }';
   html += '  } catch (err) { alert("Помилка завантаження даних"); }';
   html += '}';
-
-
   
   html += 'async function toggleDriverBlock(driverId, setActivate) {';
-  html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього користувача?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього користувача?");';
+  html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього користувача?" : "Ви впевнені, що хочете ЗАБЛОКУВАТИ цього користувача?");';
   html += '  if (!confirmAction) return;';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId, activeStatus: setActivate }) });';
   html += '    const data = await response.json();';
   html += '    if (data.ok) { alert("Статус доступу успішно змінено!"); loadUnverifiedDrivers(); }';
   html += '    else { alert("Помилка: " + data.error); }';
-  html += '  } catch (err) { alert("Помилка сервера"); }';
+  html += ' } catch (err) { alert("Помилка сервера"); }';
   html += '}';
-  
   html += 'async function grantManualSubscription() {';
   html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
   html += ' if(!phone) { alert("Введіть номер телефону!"); return; }';
   html += ' try {';
   html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
   html += ' const data = await response.json();';
-  html += ' if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
-  html += ' else { alert("❌ Помилка: " + data.error); }';
-  html += ' } catch(err) { alert("Помилка дзвінка на сервер"); }';
+  html += ' if(data.ok) { alert("Тестовий безліміт успішно активовано!"); document.getElementById("targetUserPhone").value = ""; loadUnverifiedDrivers(); }';
+  html += ' else { alert("Помилка: " + data.error); }';
+  html += ' } catch(err) { alert("Помилка зєднання з сервером"); }';
   html += '}';
   html += '';
   res.send(html);
-});
+  });
+
 
 
 // 🚀 АДМІН-ЛОГІН: Исправлен URL-путь роутинга и извлечение rows[0]
