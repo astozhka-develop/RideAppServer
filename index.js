@@ -511,17 +511,20 @@ app.get('/admin', (req, res) => {
   html += '  } catch (err) { alert("Помилка мережі при вході"); }';
   html += '}';
   
+    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Полностью изолированные стандартные строки JavaScript фронтенда
   html += 'async function loadUnverifiedDrivers() {';
   html += '  try {';
   html += '    const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });';
   html += '    const data = await response.json();';
   html += '    if (!data.ok) { alert("Помилка завантаження: " + data.error); return; }';
   
-  // Вставляем цифры статистики в верхние окна
-  html += '    document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;';
-  html += '    document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;';
+  // Обновление окон живой статистики в админке
+  html += '    if (data.stats) {';
+  html += '      document.getElementById("statTotalUsers").innerText = data.stats.totalUsers || 0;';
+  html += '      document.getElementById("statTodayUsers").innerText = data.stats.todayUsers || 0;';
+  html += '    }';
   
-  // Отрисовка водителей
+  // Отрисовка карточек водителей
   html += '    const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";';
   html += '    if (data.drivers && data.drivers.length > 0) {';
   html += '      data.drivers.forEach(driver => {';
@@ -529,12 +532,12 @@ app.get('/admin', (req, res) => {
   html += '        let isDriverActive = driver.isVerified === true || driver.isVerified === "true" || driver.isVerified === 1;';
   html += '        let statusBadge = isDriverActive ? "<span class=\'badge\' style=\'background:#D1FAE5; color:#065F46;\'>Активний</span>" : "<span class=\'badge\' style=\'background:#FEE2E2; color:#991B1B;\'>ЗАБЛОКОВАНИЙ</span>";';
   html += '        let actionButton = isDriverActive ? "<button class=\'btn-approve\' style=\'background-color:#EF4444;\' onclick=\'toggleDriverBlock(" + driver.id + ", false)\'>ЗАБЛОКУВАТИ</button>" : "<button class=\'btn-approve\' style=\'background-color:#10B981;\' onclick=\'toggleDriverBlock(" + driver.id + ", true)\'>РОЗБЛОКУВАТИ</button>";';
-  html += '        card.innerHTML = "<div class=\'driver-info\'><strong>" + driver.name + "</strong> " + statusBadge + "<br><small>Тел: " + driver.phone + "</small> <span class=\'badge\'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></div><div class=\'actions\'>" + actionButton + "</div>";';
+  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class=\'badge\'></p></div><div class=\'actions\'>" + actionButton + "</div>";';
   html += '        listDiv.appendChild(card);';
   html += '      });';
   html += '    } else { listDiv.innerHTML = "<div class=\'no-data\'>Водіїв не знайдено.</div>"; }';
   
-  // Отрисовка пассажиров
+  // Отрисовка карточек пассажиров
   html += '    const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";';
   html += '    if (data.passengers && data.passengers.length > 0) {';
   html += '      data.passengers.forEach(pass => {';
@@ -542,12 +545,13 @@ app.get('/admin', (req, res) => {
   html += '        let isPassengerActive = pass.isVerified === true || pass.isVerified === "true" || pass.isVerified === 1;';
   html += '        let statusBadge = isPassengerActive ? "<span class=\'badge\' style=\'background:#D1FAE5; color:#065F46;\'>Активний</span>" : "<span class=\'badge\' style=\'background:#FEE2E2; color:#991B1B;\'>ЗАБЛОКОВАНИЙ</span>";';
   html += '        let actionButton = isPassengerActive ? "<button class=\'btn-approve\' style=\'background-color:#EF4444;\' onclick=\'toggleDriverBlock(" + pass.id + ", false)\'>ЗАБЛОКУВАТИ</button>" : "<button class=\'btn-approve\' style=\'background-color:#10B981;\' onclick=\'toggleDriverBlock(" + pass.id + ", true)\'>РОЗБЛОКУВАТИ</button>";';
-  html += '        card.innerHTML = "<div class=\'driver-info\'><strong>" + pass.name + "</strong> " + statusBadge + "<br><small>Тел: " + pass.phone + "</small></div><div class=\'actions\'>" + actionButton + "</div>";';
+  html += '        card.innerHTML = "<div class=\'driver-info\'><h3>" + pass.name + " " + statusBadge + "</h3><p>Тел: " + pass.phone + "</p></div><div class=\'actions\'>" + actionButton + "</div>";';
   html += '        passDiv.appendChild(card);';
   html += '      });';
   html += '    } else { passDiv.innerHTML = "<div class=\'no-data\'>Пасажирів не знайдено.</div>"; }';
-  html += '  } catch (err) { alert("Критична помилка завантаження списків: " + err.message); }';
-  html += '}'; // 🔥 СИНТАКСИС ИСПРАВЛЕН: Лишняя точка с запятой полностью удалена!
+  html += '  } catch (err) { console.error(err); }';
+  html += '}';
+
   
   html += 'async function toggleDriverBlock(driverId, setActivate) {';
   html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього користувача?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього користувача?");';
