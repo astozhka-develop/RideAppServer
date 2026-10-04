@@ -318,26 +318,41 @@ app.get('/api/bids/driver/incoming', async (req, res) => {
   }
 });
 
+// 🚀 ПАСАЖИР: Регулярне опитування статусу надісланої ставки — СИНТАКСИС ПОВНІСТЮ ВИПРАВЛЕНО
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
-if (result.rows.length === 0) return res.json({ ok: true, status: 'pending', driverPhone: null });
-// 🔥 ИСПРАВЛЕНО СИНТАКСИС: Извлечение значений переведено на нулевой индекс массива результатов
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null
+  try {
+    const { tripId } = req.query;
+    if (!tripId) {
+      return res.json({ ok: false, error: 'Пропущений tripId пасажира' });
+    }
+    
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone" 
+       FROM ride_bids b 
+       JOIN users u ON b.driver_id = u.id 
+       WHERE b.trip_id = $1 
+       ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+    
+    // 🔥 ИСПРАВЛЕНО: Чтение строго через нулевой индекс первой строки [0] массива СУБД!
+    const topBid = result.rows[0];
+    
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Status passenger poll error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера статусу ставки: ' + err.message });
+  }
 });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
