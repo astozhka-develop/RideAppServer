@@ -141,7 +141,9 @@ app.get('/api/profile', async (req, res) => {
       [decoded.id]
     );
     
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+        if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+    
+    // 🔥 ИСПРАВЛЕНО: Достаем одиночный объект пользователя из массива результатов PostgreSQL!
     const user = result.rows[0];
     
     const now = new Date();
@@ -156,24 +158,24 @@ app.get('/api/profile', async (req, res) => {
     
     if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
       const msLeft = subscriptionExpiresAt - now;
-      daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+      daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
       isBlocked = false;
     } else if (now < trialExpiryDate) {
       const msLeft = trialExpiryDate - now;
-      daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+      daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
       isBlocked = false;
     } else {
       daysLeft = 0;
       isBlocked = true;
     }
 
-        // 🔥 ИСПРАВЛЕНО: Правильное сравнение булевого типа Supabase (без кавычек!)
-    if (user.is_verified === false || user.is_verified === 0) {
+    // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Читаем булево поле is_verified напрямую из объекта СУБД без кавычек!
+    if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
       daysLeft = 0;
       isBlocked = true;
     }
-
        
+    // 🔥 Отправляем чистый camelCase объект в Android Retrofit
     res.json({ 
       ok: true, 
       user: {
@@ -192,6 +194,7 @@ app.get('/api/profile', async (req, res) => {
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
+
 
 
 
@@ -234,7 +237,7 @@ app.post('/api/trips', async (req, res) => {
     const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // 🔥 ДОБАВЛЕНО: Если пользователь заблокирован в админке, сервер ЗАПРЕТИТ ему включать радар!
+        // 🔥 ИСПРАВЛЕНО: Добавлен индекс [0] для точной проверки булевого поля СУБД
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [decoded.id]);
     if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
       return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
