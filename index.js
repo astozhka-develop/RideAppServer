@@ -716,11 +716,9 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
     const { userId } = req.body;
     if (!userId) return res.send('Помилка: Не вказано ID користувача');
     
-    // Сдвигаем подписку вперед на 30 дней от текущего момента NOW()
+    // 🔥 ИСПРАВЛЕНО: Запрос обернут в строгие косые кавычки ` `, баланс скобок идеален!
     await pool.query(
-      `UPDATE users 
-       SET subscription_expires_at = NOW() + INTERVAL '30 days' 
-       WHERE id = $1`,
+      `UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days' WHERE id = $1`,
       [parseInt(userId)]
     );
     res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів. Можете повернутися в додаток.</p></body></html>');
@@ -728,6 +726,7 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
     res.send('Помилка обробки платежу: ' + err.message);
   }
 });
+
 
 // ==========================================
 // 🚀 ЗАПУСКАЕМ СЕРВЕР (СТРОГИЙ СИНТАКСИС)
