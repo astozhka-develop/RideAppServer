@@ -472,6 +472,18 @@ app.get('/admin', (req, res) => {
   html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
   
   html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
+    // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Окна живой статистики уникальных устройств
+  html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
+  html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.05);">';
+  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО УНІКАЛЬНИХ ПРИСТРОЇВ</div>';
+  html += '    <div id="statTotalUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
+  html += '  </div>';
+  html += '  <div style="flex:1; background:#10B981; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(16,185,129,0.05);">';
+  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📈 НОВИХ ПРИСТРОЇВ (ЗА СЬОГОДНІ)</div>';
+  html += '    <div id="statTodayUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
+  html += '  </div>';
+  html += '</div>';
+
   html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками </h3>';
   html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
   html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
@@ -501,6 +513,11 @@ app.get('/admin', (req, res) => {
     try {
       const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });
       const data = await response.json();
+      // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Передача цифр из ответа сервера в HTML-окна
+      if (data.stats) {
+        document.getElementById("statTotalUsers").innerText = data.stats.totalDevices || 0;
+        document.getElementById("statTodayUsers").innerText = data.stats.todayDevices || 0;
+      }
       
       if (!data.ok) {
         document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Помилка сервера: " + data.error + "</div>";
@@ -614,21 +631,27 @@ app.post('/api/admin/login', async (req, res) => {
     res.json({ ok: false, error: err.message }); 
   }
 });
-// 🚀 АДМІН: Отримання ПОВНОГО списку водіїв та пасажирів (ВСЕЯДНИЙ ДЛЯ ВЕБ І АНДРОЇД)
+// 🚀 АДМІН: Отримання списків та точний підрахунок унікальних пристроїв по device_trials
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
     const parts = authHeader.split(' ');
-    
-    // 🔥 ИСПРАВЛЕНО: Еслиparts[1] существует (это веб-браузер с Bearer), берем его. Если нет (это Android) — берем чистый parts[0]!
     const token = parts.length > 1 ? parts[1] : parts[0];
     
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 1. Витягуємо ВСІХ водіїв з бази
+    // 🔥 ТОЧЕЧНЫЙ SQL-ПОДЛЕТ: Считаем общее число уникальных когда-либо зарегистрированных девайсов
+    const totalQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials');
+    const totalDevices = totalQuery.rows[0].count;
+
+    // 🔥 ТОЧЕЧНЫЙ SQL-ПОДЛЕТ: Считаем пристрої, добавленные строго за текущие сутки (с 00:00 сегодняшнего дня)
+    const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
+    const todayDevices = todayQuery.rows[0].count;
+    
+    // Выборка списков водителей и пассажиров (оригинальная логика сохранена на 100%)
     const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
@@ -636,7 +659,6 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // 2. Витягуємо ВСІХ пасажирів з бази
     const passengersResult = await pool.query(`
       SELECT id, name, phone, is_verified AS "isVerified"
       FROM users 
@@ -644,17 +666,22 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // Віддаємо на веб-сторінку обидва масиви даних
+    // Отправляем данные, инжектируя объект stats с девайсами
     res.json({ 
       ok: true, 
+      stats: {
+        totalDevices: totalDevices,
+        todayDevices: todayDevices
+      },
       drivers: driversResult.rows,
       passengers: passengersResult.rows
     });
   } catch (err) { 
     console.error('Admin drivers fetch error:', err.message);
-    res.json({ ok: false, error: 'Помилка безпеки токена: ' + err.message }); 
+    res.json({ ok: false, error: 'Помилка безпеки токена або сервера СУБД: ' + err.message }); 
   }
 });
+
 
 
 
