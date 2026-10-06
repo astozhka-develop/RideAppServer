@@ -229,7 +229,7 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 Створення активного маршруту на карті — ИСПРАВЛЕН СИНТАКСИС JS (const) И ИНДЕКС СТРОКИ
+// 🚀 ОПТИМІЗОВАНО: Стратегія UPSERT запобігає роздуванню бази даних при постійному оновленні координат GPS!
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -239,33 +239,34 @@ app.post('/api/trips', async (req, res) => {
     const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-        // 🔥 ИСПРАВЛЕНО: Добавлен индекс [0] для точной проверки булевого поля СУБД
-    const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [decoded.id]);
+    const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
     if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
       return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
     }
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
-    // ... далее ваш оригинальный код UPDATE и INSERT в active_trips остается без изменений
-  
-    // Отменяем старые незавершенные поиски этого пользователя, чтобы не плодить дубли в базе
-    await pool.query(
-      "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
-      [decoded.id]
-    );
     
-    // 🔥 ИСПРАВЛЕНО: Котлиновский 'val' заменен на правильный JS 'const'!
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
     
+    // 🔥 ФІКС: Якщо у водія/пасажира вже є активний маршрут — ми перезаписуємо його координати 'на льоту', а не створюємо нову строку!
+    // (Для роботи цього механізму перевірте, щоб у таблиці active_trips у Supabase на колонку user_id було встановлено унікальний індекс UNIQUE)
     const result = await pool.query(
-      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
+       ON CONFLICT (user_id) 
+       DO UPDATE SET 
+          start_lat = EXCLUDED.start_lat, 
+          start_lon = EXCLUDED.start_lon,
+          end_lat = EXCLUDED.end_lat,
+          end_lon = EXCLUDED.end_lon,
+          start_address = EXCLUDED.start_address,
+          end_address = EXCLUDED.end_address,
+          status = 'searching'
+       RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
     
-    // 🔥 ИСПРАВЛЕНО: Извлекаем id строго из нулевого (первого) элемента массива строк PostgreSQL!
-       // Отправляем ID созданной поездки пассажира
     res.json({ ok: true, tripId: result.rows[0].id });
     
   } catch (err) {
@@ -273,6 +274,7 @@ app.post('/api/trips', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
   }
 });
+
 
 // 🔥 ВОССТАНОВЛЕНО: Объявление роута поиска попутных водителей!
 app.get('/api/trips/drivers', async (req, res) => {
