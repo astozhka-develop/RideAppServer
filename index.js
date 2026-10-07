@@ -276,23 +276,28 @@ app.post('/api/trips', async (req, res) => {
 });
 
 
-// 🔥 ВОССТАНОВЛЕНО: Объявление роута поиска попутных водителей!
+// 🚀 ВОДІЇ ДЛЯ РАДАРУ ПАСАЖИРА: Вибірка ЖИВИХ координат з таблиці active_trips замість статичних з users!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const { startLat, startLon, endLat, endLon } = req.query;
     if (!startLat || !startLon || !endLat || !endLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
-    const pStartLat = parseFloat(startLat);
-    const pStartLon = parseFloat(startLon);
-    const pEndLat = parseFloat(endLat);
-    const pEndLon = parseFloat(endLon);
     
-            // 🔥 ИСПРАВЛЕНО: t.role = 'driver' (для таблицы поездок) и u.role = 'Водій' (для таблицы пользователей)
+    // 🔥 ИСПРАВЛЕНО: Координаты берутся из t.start_lat/t.start_lon (таблица active_trips), которая постоянно обновляется от GPS водителя!
     const result = await pool.query(
-      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
-              t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
-              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
+      `SELECT t.id AS "tripId", 
+              t.user_id::int AS "driverId", 
+              t.start_lat AS "startLat", 
+              t.start_lon AS "startLon", 
+              t.end_lat AS "endLat", 
+              t.end_lon AS "endLon", 
+              t.start_address AS "startAddress", 
+              t.end_address AS "endAddress",
+              u.name, 
+              u.phone, 
+              u.car_make AS "carMake", 
+              u.plate_number AS "plateNumber"
        FROM active_trips t
        JOIN users u ON t.user_id = u.id
        WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true
@@ -300,12 +305,12 @@ app.get('/api/trips/drivers', async (req, res) => {
     );
     
     res.json({ ok: true, drivers: result.rows });
-
   } catch (err) {
     console.error('Get drivers error:', err.message);
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 
 
 
