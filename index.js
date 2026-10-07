@@ -251,6 +251,7 @@ app.post('/api/trips', async (req, res) => {
     
     // 🔥 ФІКС: Якщо у водія/пасажира вже є активний маршрут — ми перезаписуємо його координати 'на льоту', а не створюємо нову строку!
     // (Для роботи цього механізму перевірте, щоб у таблиці active_trips у Supabase на колонку user_id було встановлено унікальний індекс UNIQUE)
+        // 🟢 ИСПРАВЛЕНО: Принудительный статус 'searching' при UPSERT обновлении координат водителя в пути!
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
@@ -260,12 +261,11 @@ app.post('/api/trips', async (req, res) => {
           start_lon = EXCLUDED.start_lon,
           end_lat = EXCLUDED.end_lat,
           end_lon = EXCLUDED.end_lon,
-          start_address = EXCLUDED.start_address,
-          end_address = EXCLUDED.end_address,
           status = 'searching'
        RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
+
     
     res.json({ ok: true, tripId: result.rows[0].id });
     
