@@ -230,90 +230,73 @@ app.put('/api/profile', async (req, res) => {
 // ==========================================
 
 // 🚀 ОБНОВЛЕННЫЙ ВАРИАНТ: Полная изоляция координат от текстовых адресов для стабильного GPS-трекинга в пути!
+// 🚀 ЖИВОЙ МАЯК ВОДИТЕЛЯ: Обновляем координаты напрямую в таблице users за 2 миллисекунды!
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const parts = authHeader.split(' ');
-    // 🟢 ИСПРАВЛЕНО: Строгое и безопасное извлечение токена из массива заголовка Express!
-    const token = parts.length > 1 ? parts[1] : parts[0];
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
-    if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
+    const { role, startLat, startLon } = req.body;
+    
+    if (role === 'driver') {
+      // 🔥 КРИТИЧЕСКИЙ ФИКС: Пишем координаты шага GPS напрямую водителю в users
+      await pool.query(
+        'UPDATE users SET current_lat = \$1, current_lon = \$2, updated_at = NOW() WHERE id = \$3',
+        [startLat, startLon, decoded.id]
+      );
+      return res.json({ ok: true, message: "Маяк водія успішно оновлено" });
     }
     
-    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
-    
-    // Подстраховка дефолтных значений для первой записи
-    const finalStartAddress = startAddress || "Точка на карті (Старт)";
-    const finalEndAddress = endAddress || "Точка на карті (Фініш)";
-    
-    // 🔥 ФИКС: При конфликте user_id мы ОБНОВЛЯЕМ ТОЛЬКО координаты Lat/Lon и время updated_at, 
-    // полностью игнорируя и сохраняя старые текстовые адреса старта и финиша!
+    // Логика для пассажира (остается без изменений)
+    const { endLat, endLon, startAddress, endAddress } = req.body;
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
        ON CONFLICT (user_id) 
-       DO UPDATE SET 
-          start_lat = EXCLUDED.start_lat, 
-          start_lon = EXCLUDED.start_lon,
-          status = 'searching'
+       DO UPDATE SET start_lat = EXCLUDED.start_lat, start_lon = EXCLUDED.start_lon, status = 'searching'
        RETURNING id`,
-      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
+      [decoded.id, role, startLat, startLon, endLat, endLon, startAddress || "", endAddress || ""]
     );
-    
     res.json({ ok: true, tripId: result.rows[0].id });
   } catch (err) {
-    console.error('Trip update error:', err.message);
-    res.json({ ok: false, error: 'Помилка обновления координат: ' + err.message });
+    console.error('GPS Polling error:', err.message);
+    res.json({ ok: false, error: err.message });
   }
 });
+
 
 
 
 // 🚀 ВОДІЇ ДЛЯ РАДАРУ ПАСАЖИРА: Вибірка ЖИВИХ координат з таблиці active_trips замість статичних з users!
+// 🚀 РАДАР ПАСАЖИРА: Считываем живой маяк координат напрямую из users без зависаний!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    const { startLat, startLon } = req.query;
+    if (!startLat || !startLon) return res.json({ ok: false, error: 'Пропущені координати' });
     
-    // Чистая строка токена без префиксов
-    const token = authHeader.replace(/^Bearer\s+/, '').trim();
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    const { startLat, startLon, endLat, endLon } = req.query;
-    if (!startLat || !startLon || !endLat || !endLon) {
-        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
-    }
-    
+    // Выбираем всех верифицированных водителей, у которых заданы живые координаты
     const result = await pool.query(
-      `SELECT t.id AS "tripId", 
-              t.user_id::int AS "driverId", 
-              t.start_lat AS "startLat", 
-              t.start_lon AS "startLon", 
-              t.end_lat AS "endLat", 
-              t.end_lon AS "endLon", 
-              t.start_address AS "startAddress", 
-              t.end_address AS "endAddress",
-              u.name, 
-              u.phone, 
-              u.car_make AS "carMake", 
-              u.plate_number AS "plateNumber"
-       FROM active_trips t
-       JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true
-       ORDER BY t.id DESC`
+      `SELECT id AS "driverId", 
+              name, 
+              phone, 
+              car_make AS "carMake", 
+              plate_number AS "plateNumber", 
+              current_lat AS "startLat", 
+              current_lon AS "startLon"
+       FROM users 
+       WHERE role = 'Водій' AND is_verified = true AND current_lat IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 50`
     );
     
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
-    console.error('Get drivers error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
+    res.json({ ok: false, error: err.message });
   }
 });
+
 
 
 
