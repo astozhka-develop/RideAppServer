@@ -236,7 +236,8 @@ app.post('/api/trips', async (req, res) => {
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts : parts;
+    // 🟢 ИСПРАВЛЕНО: Строгое и безопасное извлечение токена из массива заголовка Express!
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
@@ -276,9 +277,11 @@ app.post('/api/trips', async (req, res) => {
 // 🚀 ВОДІЇ ДЛЯ РАДАРУ ПАСАЖИРА: Вибірка ЖИВИХ координат з таблиці active_trips замість статичних з users!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const { startLat, startLon, endLat, endLon } = req.query;
-    if (!startLat || !startLon || !endLat || !endLon) {
-        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
     }
     
     // 🔥 ИСПРАВЛЕНО: Координаты берутся из t.start_lat/t.start_lon (таблица active_trips), которая постоянно обновляется от GPS водителя!
@@ -638,11 +641,12 @@ app.post('/api/admin/login', async (req, res) => {
 // 🚀 АДМІН: Отримання списків та точний підрахунок унікальних пристроїв по device_trials
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
+       const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
-    const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+
     
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
