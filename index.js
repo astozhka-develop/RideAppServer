@@ -226,84 +226,85 @@ app.put('/api/profile', async (req, res) => {
 });
 
 // ==========================================
-// 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
+// 🗺️ БЛОК ПОЕЗДОК (СТАТИЧНЫЙ РАДАР 25 МИНУТ)
 // ==========================================
 
-// 🚀 ОБНОВЛЕННЫЙ ВАРИАНТ: Полная изоляция координат от текстовых адресов для стабильного GPS-трекинга в пути!
-// 🚀 ЖИВОЙ МАЯК ВОДИТЕЛЯ: Обновляем координаты напрямую в таблице users за 2 миллисекунды!
-// 🚀 ОПТИМІЗОВАНО: Роут створення/оновлення рейсу з виправленим поверненням tripId строго з rows[0]
+// 🚀 1. Створення активного маршруту на карті (Классический INSERT)
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const parts = authHeader.split(' ');
+    const token = parts.length > 1 ? parts[1] : parts[0];
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
     if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією Diway.' });
+      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
     }
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
     
+    // Перед созданием нового маршрута гасим старые поиски этого же пользователя
+    await pool.query(
+      "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
+      [decoded.id]
+    );
+    
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
     
-    // БЕЗОПАСНЫЙ UPSERT: Записываем или перезаписываем координаты, удерживая статус 'searching'
     const result = await pool.query(
-      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
-       ON CONFLICT (user_id) 
-       DO UPDATE SET 
-          start_lat = EXCLUDED.start_lat, 
-          start_lon = EXCLUDED.start_lon,
-          status = 'searching'
-       RETURNING id`,
+      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', NOW()) RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
     
-    // 🔥 ФИКС: Извлекаем id строго из нулевого (первого) элемента массива строк PostgreSQL rows[0]!
-    const activeTripId = result.rows[0].id;
-    
-    res.json({ ok: true, tripId: activeTripId });
+    res.json({ ok: true, tripId: result.rows[0].id });
   } catch (err) {
-    console.error('Trip update critical error:', err.message);
-    res.json({ ok: false, error: err.message });
+    console.error('Trip creation error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
   }
 });
 
-
-
-// 🚀 ВОДІЇ ДЛЯ РАДАРУ ПАСАЖИРА: Вибірка ЖИВИХ координат з таблиці active_trips замість статичних з users!
-// 🚀 РАДАР ПАСАЖИРА: Считываем живой маяк координат напрямую из users без зависаний!
+// 🚀 2. Пошук попутних водіїв (Жесткий фильтр: отображаются только рейсы, созданные за последние 25 минут!)
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const { startLat, startLon } = req.query;
-    if (!startLat || !startLon) return res.json({ ok: false, error: 'Пропущені координати' });
+    const { startLat, startLon, endLat, endLon } = req.query;
+    if (!startLat || !startLon || !endLat || !endLon) {
+        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
+    }
     
-    // Выбираем всех верифицированных водителей, у которых заданы живые координаты
+    // 🔥 ИСПРАВЛЕНО: Условие NOW() - INTERVAL '25 minutes' делает рейс водителя активным ровно 25 минут!
     const result = await pool.query(
-      `SELECT id AS "driverId", 
-              name, 
-              phone, 
-              car_make AS "carMake", 
-              plate_number AS "plateNumber", 
-              current_lat AS "startLat", 
-              current_lon AS "startLon"
-       FROM users 
-       WHERE role = 'Водій' AND is_verified = true AND current_lat IS NOT NULL
-       ORDER BY updated_at DESC LIMIT 50`
+      `SELECT t.id AS "tripId", 
+              t.user_id::int AS "driverId", 
+              t.start_lat AS "startLat", 
+              t.start_lon AS "startLon", 
+              t.end_lat AS "endLat", 
+              t.end_lon AS "endLon", 
+              t.start_address AS "startAddress", 
+              t.end_address AS "endAddress",
+              u.name, 
+              u.phone, 
+              u.car_make AS "carMake", 
+              u.plate_number AS "plateNumber"
+       FROM active_trips t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.role = 'driver' 
+         AND t.status = 'searching' 
+         AND u.is_verified = true
+         AND t.created_at >= NOW() - INTERVAL '25 minutes'
+       ORDER BY t.id DESC`
     );
     
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
-    res.json({ ok: false, error: err.message });
+    console.error('Get drivers error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
-
-
-
 
 
 // ==========================================
