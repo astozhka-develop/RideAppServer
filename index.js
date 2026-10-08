@@ -280,11 +280,15 @@ app.get('/api/trips/drivers', async (req, res) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
+    // Чистая строка токена без префиксов
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    const { startLat, startLon, endLat, endLon } = req.query;
+    if (!startLat || !startLon || !endLat || !endLon) {
+        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
     
-    // 🔥 ИСПРАВЛЕНО: Координаты берутся из t.start_lat/t.start_lon (таблица active_trips), которая постоянно обновляется от GPS водителя!
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -641,25 +645,19 @@ app.post('/api/admin/login', async (req, res) => {
 // 🚀 АДМІН: Отримання списків та точний підрахунок унікальних пристроїв по device_trials
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
-       const authHeader = req.headers['authorization'];
+    const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
     
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    
-    const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
     
-    // 🔥 ТОЧЕЧНЫЙ SQL-ПОДЛЕТ: Считаем общее число уникальных когда-либо зарегистрированных девайсов
     const totalQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials');
     const totalDevices = totalQuery.rows[0].count;
 
-    // 🔥 ТОЧЕЧНЫЙ SQL-ПОДЛЕТ: Считаем пристрої, добавленные строго за текущие сутки (с 00:00 сегодняшнего дня)
     const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
     const todayDevices = todayQuery.rows[0].count;
     
-    // Выборка списков водителей и пассажиров (оригинальная логика сохранена на 100%)
     const driversResult = await pool.query(`
       SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
       FROM users 
@@ -674,7 +672,6 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
       ORDER BY is_verified ASC, id DESC
     `);
 
-    // Отправляем данные, инжектируя объект stats с девайсами
     res.json({ 
       ok: true, 
       stats: {
@@ -689,7 +686,6 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка безпеки токена або сервера СУБД: ' + err.message }); 
   }
 });
-
 
 
 
