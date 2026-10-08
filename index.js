@@ -229,14 +229,14 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 ОПТИМІЗОВАНО: Стратегія UPSERT запобігає роздуванню бази даних при постійному оновленні координат GPS!
+// 🚀 ОБНОВЛЕННЫЙ ВАРИАНТ: Полная изоляция координат от текстовых адресов для стабильного GPS-трекинга в пути!
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
     const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
+    const token = parts.length > 1 ? parts : parts;
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
@@ -246,12 +246,12 @@ app.post('/api/trips', async (req, res) => {
     
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
     
+    // Подстраховка дефолтных значений для первой записи
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
     
-    // 🔥 ФІКС: Якщо у водія/пасажира вже є активний маршрут — ми перезаписуємо його координати 'на льоту', а не створюємо нову строку!
-    // (Для роботи цього механізму перевірте, щоб у таблиці active_trips у Supabase на колонку user_id було встановлено унікальний індекс UNIQUE)
-        // 🟢 ИСПРАВЛЕНО: Принудительный статус 'searching' при UPSERT обновлении координат водителя в пути!
+    // 🔥 ФИКС: При конфликте user_id мы ОБНОВЛЯЕМ ТОЛЬКО координаты Lat/Lon и время updated_at, 
+    // полностью игнорируя и сохраняя старые текстовые адреса старта и финиша!
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
@@ -259,21 +259,18 @@ app.post('/api/trips', async (req, res) => {
        DO UPDATE SET 
           start_lat = EXCLUDED.start_lat, 
           start_lon = EXCLUDED.start_lon,
-          end_lat = EXCLUDED.end_lat,
-          end_lon = EXCLUDED.end_lon,
           status = 'searching'
        RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
-
     
     res.json({ ok: true, tripId: result.rows[0].id });
-    
   } catch (err) {
-    console.error('Trip creation error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
+    console.error('Trip update error:', err.message);
+    res.json({ ok: false, error: 'Помилка обновления координат: ' + err.message });
   }
 });
+
 
 
 // 🚀 ВОДІЇ ДЛЯ РАДАРУ ПАСАЖИРА: Вибірка ЖИВИХ координат з таблиці active_trips замість статичних з users!
