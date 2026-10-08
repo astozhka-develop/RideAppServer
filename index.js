@@ -231,6 +231,7 @@ app.put('/api/profile', async (req, res) => {
 
 // 🚀 ОБНОВЛЕННЫЙ ВАРИАНТ: Полная изоляция координат от текстовых адресов для стабильного GPS-трекинга в пути!
 // 🚀 ЖИВОЙ МАЯК ВОДИТЕЛЯ: Обновляем координаты напрямую в таблице users за 2 миллисекунды!
+// 🚀 ОПТИМІЗОВАНО: Роут створення/оновлення рейсу з виправленим поверненням tripId строго з rows[0]
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -239,34 +240,38 @@ app.post('/api/trips', async (req, res) => {
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const { role, startLat, startLon } = req.body;
-    
-    if (role === 'driver') {
-      // 🔥 КРИТИЧЕСКИЙ ФИКС: Пишем координаты шага GPS напрямую водителю в users
-      await pool.query(
-        'UPDATE users SET current_lat = \$1, current_lon = \$2, updated_at = NOW() WHERE id = \$3',
-        [startLat, startLon, decoded.id]
-      );
-      return res.json({ ok: true, message: "Маяк водія успішно оновлено" });
+    const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
+    if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
+      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією Diway.' });
     }
     
-    // Логика для пассажира (остается без изменений)
-    const { endLat, endLon, startAddress, endAddress } = req.body;
+    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+    
+    const finalStartAddress = startAddress || "Точка на карті (Старт)";
+    const finalEndAddress = endAddress || "Точка на карті (Фініш)";
+    
+    // БЕЗОПАСНЫЙ UPSERT: Записываем или перезаписываем координаты, удерживая статус 'searching'
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching') 
        ON CONFLICT (user_id) 
-       DO UPDATE SET start_lat = EXCLUDED.start_lat, start_lon = EXCLUDED.start_lon, status = 'searching'
+       DO UPDATE SET 
+          start_lat = EXCLUDED.start_lat, 
+          start_lon = EXCLUDED.start_lon,
+          status = 'searching'
        RETURNING id`,
-      [decoded.id, role, startLat, startLon, endLat, endLon, startAddress || "", endAddress || ""]
+      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
     );
-    res.json({ ok: true, tripId: result.rows[0].id });
+    
+    // 🔥 ФИКС: Извлекаем id строго из нулевого (первого) элемента массива строк PostgreSQL rows[0]!
+    const activeTripId = result.rows[0].id;
+    
+    res.json({ ok: true, tripId: activeTripId });
   } catch (err) {
-    console.error('GPS Polling error:', err.message);
+    console.error('Trip update critical error:', err.message);
     res.json({ ok: false, error: err.message });
   }
 });
-
 
 
 
