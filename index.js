@@ -272,32 +272,23 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 РОЗУМНИЙ РАДАР РАЙДШЕРИНГА: Повне зіставлення району без конфліктів часових поясів (Timezone Offset)!
+
+// 🚀 ОПТИМИЗИРОВАНО ПОД РАЙДШЕРИНГ: Выдача живых координат в camelCase с фильтром 25 минут!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const token = authHeader.replace(/^Bearer\s+/, '').trim();
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded) return res.json({ ok: false, error: 'Невалідний токен' });
-
-    // Приймаємо координати старту пасажира
-    const { startLat, startLon } = req.query;
-    if (!startLat || !startLon) {
+    const { startLat, startLon, endLat, endLon } = req.query;
+    if (!startLat || !startLon || !endLat || !endLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
-
-    const pLat = parseFloat(startLat);
-    const pLon = parseFloat(startLon);
+    const pStartLat = parseFloat(startLat);
+    const pStartLon = parseFloat(startLon);
     
-    // Географічний допуск (~2.5 км навколо точки старту пасажира)
+    // Математический допуск (~2.5 км вокруг точки старта пассажира)
     const latDelta = 0.025; 
     const lonDelta = 0.03;
-
-    // 🔥 ФІКС: Ми розширили часовий допуск до +/- 12 годин від NOW().
-    // Тепер база даних виводить усіх активних водіїв з попутного району на поточну добу,
-    // повністю ігноруючи зміщення часових поясів між Україною та сервером Render!
+    
+    // 🔥 ФИКС: Явно переименовываем t.start_lat AS "startLat" и t.start_lon AS "startLon" 
+    // Также накладываем фильтр t.created_at >= NOW() - INTERVAL '25 minutes' (Рейс активен ровно 25 минут!)
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -317,21 +308,22 @@ app.get('/api/trips/drivers', async (req, res) => {
        WHERE t.role = 'driver' 
          AND t.status = 'searching' 
          AND u.is_verified = true
-         -- Фільтр попутного району (+/- 2.5 км)
+         -- Ищем водителей из попутного района пассажира
          AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
          AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-         -- Стійкий фільтр часу (усі рейси за поточні 24 години)
-         AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours'
-       ORDER BY t.departure_time ASC`,
-      [pLat, latDelta, pLon, lonDelta]
+         -- Поездка водителя отображается на карте строго 25 минут
+         AND t.created_at >= NOW() - INTERVAL '25 minutes'
+       ORDER BY t.id DESC`,
+      [pStartLat, latDelta, pStartLon, lonDelta]
     );
     
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
-    console.error('Smart radar fetch error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера попутного пошуку: ' + err.message });
+    console.error('Get drivers error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 
 
 
@@ -882,19 +874,18 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 // ==========================================
 // 🧹 СИСТЕМНАЯ ОЧИСТКА БАЗЫ ДАННЫХ (КАЖДЫЕ 5 ЧАСОВ)
 // ==========================================
+// 🧹 СИСТЕМНАЯ АВТООЧИСТКА: Удаляем архивные рейсы из базы каждые 5 часов
 setInterval(async () => {
   try {
-    // 🔥 Автоматически удаляем любые записи из active_trips, созданные более 5 часов назад
-    const deleteResult = await pool.query(
-      "DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'"
-    );
+    const deleteResult = await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
     if (deleteResult.rowCount > 0) {
-      console.log(`🧹 Фоновая очистка: Удалено ${deleteResult.rowCount} устаревших рейсов (старше 5 часов).`);
+      console.log(`🧹 База очищена: Стерто ${deleteResult.rowCount} старых рейсов.`);
     }
   } catch (err) {
-    console.error('Ошибка автоматической очистки базы данных:', err.message);
+    console.error('Ошибка очистки active_trips:', err.message);
   }
-}, 1000 * 60 * 60); // Проверка запускается каждый час
+}, 1000 * 60 * 60); // Проверка раз в час
+
 
 
 // ==========================================
