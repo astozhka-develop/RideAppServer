@@ -874,6 +874,24 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 });
 
 // ==========================================
+// 🧹 СИСТЕМНАЯ ОЧИСТКА БАЗЫ ДАННЫХ (КАЖДЫЕ 5 ЧАСОВ)
+// ==========================================
+setInterval(async () => {
+  try {
+    // 🔥 Автоматически удаляем любые записи из active_trips, созданные более 5 часов назад
+    const deleteResult = await pool.query(
+      "DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'"
+    );
+    if (deleteResult.rowCount > 0) {
+      console.log(`🧹 Фоновая очистка: Удалено ${deleteResult.rowCount} устаревших рейсов (старше 5 часов).`);
+    }
+  } catch (err) {
+    console.error('Ошибка автоматической очистки базы данных:', err.message);
+  }
+}, 1000 * 60 * 60); // Проверка запускается каждый час
+
+
+// ==========================================
 // 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
 // ==========================================
 app.listen(PORT, () => {
