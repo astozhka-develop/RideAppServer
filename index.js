@@ -272,7 +272,7 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 2. Розумний пошук попутних водіїв (Радіус ~2.5 км + вікно виїзду у 2 години)
+// 🚀 РОЗУМНИЙ РАДАР РАЙДШЕРИНГА: Повне зіставлення району без конфліктів часових поясів (Timezone Offset)!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -282,6 +282,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded) return res.json({ ok: false, error: 'Невалідний токен' });
 
+    // Приймаємо координати старту пасажира
     const { startLat, startLon } = req.query;
     if (!startLat || !startLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
@@ -290,11 +291,13 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pLat = parseFloat(startLat);
     const pLon = parseFloat(startLon);
     
-    // Географический допуск (~2.5 км вокруг точки отправления пассажира)
+    // Географічний допуск (~2.5 км навколо точки старту пасажира)
     const latDelta = 0.025; 
     const lonDelta = 0.03;
 
-    // 🔥 ФИЛЬТР: Ищем водителей, чей старт совпадает по району и время выезда укладывается в окно (-30 мин ... +2 часа)
+    // 🔥 ФІКС: Ми розширили часовий допуск до +/- 12 годин від NOW().
+    // Тепер база даних виводить усіх активних водіїв з попутного району на поточну добу,
+    // повністю ігноруючи зміщення часових поясів між Україною та сервером Render!
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -314,9 +317,11 @@ app.get('/api/trips/drivers', async (req, res) => {
        WHERE t.role = 'driver' 
          AND t.status = 'searching' 
          AND u.is_verified = true
+         -- Фільтр попутного району (+/- 2.5 км)
          AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
          AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-         AND t.departure_time BETWEEN NOW() - INTERVAL '30 minutes' AND NOW() + INTERVAL '2 hours'
+         -- Стійкий фільтр часу (усі рейси за поточні 24 години)
+         AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours'
        ORDER BY t.departure_time ASC`,
       [pLat, latDelta, pLon, lonDelta]
     );
@@ -327,6 +332,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера попутного пошуку: ' + err.message });
   }
 });
+
 
 
 
