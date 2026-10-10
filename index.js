@@ -229,25 +229,25 @@ app.put('/api/profile', async (req, res) => {
 });
 
 // ==========================================
-// 🗺️ БЛОК ПОЕЗДОК (СТАТИЧНЫЙ РАДАР 25 МИНУТ)
+// 🗺️ БЛОК ПОЕЗДОК (УМНЫЙ РАДАР РАЙДШЕРИНГА)
 // ==========================================
 
-// 🚀 1. Створення активного маршруту на карті (Классический INSERT)
+// 🚀 1. Створення активного маршруту з урахуванням часу виїзду
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
     
-    const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
     if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
+      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією Diway.' });
     }
     
-    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
+    // 🔥 Принимаем departureTime с Android (в формате ISO строки, например: "2026-10-10T08:00:00Z")
+    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress, departureTime } = req.body;
     
     // Перед созданием нового маршрута гасим старые поиски этого же пользователя
     await pool.query(
@@ -257,11 +257,12 @@ app.post('/api/trips', async (req, res) => {
     
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
+    const finalDepartureTime = departureTime || new Date().toISOString(); // Если время не передано — берем текущее NOW()
     
     const result = await pool.query(
-      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', NOW()) RETURNING id`,
-      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress]
+      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, departure_time, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', $9, NOW()) RETURNING id`,
+      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress, finalDepartureTime]
     );
     
     res.json({ ok: true, tripId: result.rows[0].id });
@@ -271,15 +272,29 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-// 🚀 2. Пошук попутних водіїв (Жесткий фильтр: отображаются только рейсы, созданные за последние 25 минут!)
+// 🚀 2. Розумний пошук попутних водіїв (Радіус ~2.5 км + вікно виїзду у 2 години)
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const { startLat, startLon, endLat, endLon } = req.query;
-    if (!startLat || !startLon || !endLat || !endLon) {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded) return res.json({ ok: false, error: 'Невалідний токен' });
+
+    const { startLat, startLon } = req.query;
+    if (!startLat || !startLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
+
+    const pLat = parseFloat(startLat);
+    const pLon = parseFloat(startLon);
     
-    // 🔥 ИСПРАВЛЕНО: Условие NOW() - INTERVAL '25 minutes' делает рейс водителя активным ровно 25 минут!
+    // Географический допуск (~2.5 км вокруг точки отправления пассажира)
+    const latDelta = 0.025; 
+    const lonDelta = 0.03;
+
+    // 🔥 ФИЛЬТР: Ищем водителей, чей старт совпадает по району и время выезда укладывается в окно (-30 мин ... +2 часа)
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -289,6 +304,7 @@ app.get('/api/trips/drivers', async (req, res) => {
               t.end_lon AS "endLon", 
               t.start_address AS "startAddress", 
               t.end_address AS "endAddress",
+              t.departure_time AS "departureTime",
               u.name, 
               u.phone, 
               u.car_make AS "carMake", 
@@ -298,16 +314,21 @@ app.get('/api/trips/drivers', async (req, res) => {
        WHERE t.role = 'driver' 
          AND t.status = 'searching' 
          AND u.is_verified = true
-         AND t.created_at >= NOW() - INTERVAL '25 minutes'
-       ORDER BY t.id DESC`
+         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
+         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
+         AND t.departure_time BETWEEN NOW() - INTERVAL '30 minutes' AND NOW() + INTERVAL '2 hours'
+       ORDER BY t.departure_time ASC`,
+      [pLat, latDelta, pLon, lonDelta]
     );
     
     res.json({ ok: true, drivers: result.rows });
   } catch (err) {
-    console.error('Get drivers error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
+    console.error('Smart radar fetch error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера попутного пошуку: ' + err.message });
   }
 });
+
+
 
 
 // ==========================================
