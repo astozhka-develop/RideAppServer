@@ -152,10 +152,12 @@ app.get('/api/profile', async (req, res) => {
     const deviceRegisteredAt = user.first_registered_at ? new Date(user.first_registered_at) : new Date();
     const subscriptionExpiresAt = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
     
+        // 🟢 ИСПРАВЛЕНО: Бесплатный триал-период расширен до 30 дней!
     let daysLeft = 0;
     let isBlocked = false;
     
-    const trialPeriodMs = 7 * 24 * 60 * 60 * 1000;
+    // Переводим 30 дней в миллисекунды для системного таймера
+    const trialPeriodMs = 30 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
     if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
@@ -170,6 +172,7 @@ app.get('/api/profile', async (req, res) => {
       daysLeft = 0;
       isBlocked = true;
     }
+
 
     // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Читаем булево поле is_verified напрямую из объекта СУБД без кавычек!
     if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
@@ -631,7 +634,7 @@ app.post('/api/admin/login', async (req, res) => {
     res.json({ ok: false, error: err.message }); 
   }
 });
-// 🚀 АДМІН: Отримання списків та точний підрахунок унікальних пристроїв по device_trials
+// 🚀 АДМІН: Отримання списків, розрахунок 30-денного триалу та точний підрахунок унікальних пристроїв
 app.get('/api/admin/unverified-drivers', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -647,28 +650,62 @@ app.get('/api/admin/unverified-drivers', async (req, res) => {
     const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
     const todayDevices = todayQuery.rows[0].count;
     
+    // 🔥 ІСПРАВЛЕНО: Додано SELECT дат для розрахунку триалу в адмінці
     const driversResult = await pool.query(`
-      SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified"
-      FROM users 
-      WHERE role = 'Водій' 
-      ORDER BY is_verified ASC, id DESC
+      SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified",
+             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
+      FROM users u
+      LEFT JOIN device_trials d ON u.device_id = d.device_id
+      WHERE u.role = 'Водій' 
+      ORDER BY u.is_verified ASC, u.id DESC
     `);
 
     const passengersResult = await pool.query(`
-      SELECT id, name, phone, is_verified AS "isVerified"
-      FROM users 
-      WHERE role = 'Пасажир' 
-      ORDER BY is_verified ASC, id DESC
+      SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified",
+             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
+      FROM users u
+      LEFT JOIN device_trials d ON u.device_id = d.device_id
+      WHERE u.role = 'Пасажир' 
+      ORDER BY u.is_verified ASC, u.id DESC
     `);
 
+    // 🔥 ДОБАВЛЕНО: Функція розрахунку оновленого 30-денного безкоштовного періоду для веб-карток
+    const now = new Date();
+    const formatUser = (row) => {
+      const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
+      const subscriptionExpiresAt = row.subExpires ? new Date(row.subExpires) : null;
+      let daysLeft = 0;
+      let payBlocked = false;
+      
+      // Системний розрахунок 30 днів безкоштовного доступу
+      const trialPeriodMs = 30 * 24 * 60 * 60 * 1000;
+      const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
+      
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        daysLeft = Math.ceil((subscriptionExpiresAt - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else if (now < trialExpiryDate) {
+        daysLeft = Math.ceil((trialExpiryDate - now) / (1000 * 60 * 60 * 24));
+        payBlocked = false;
+      } else {
+        daysLeft = 0;
+        payBlocked = true;
+      }
+      return { 
+        id: row.id, name: row.name, phone: row.phone, carMake: row.carMake, plateNumber: row.plateNumber, 
+        isVerified: row.isVerified, daysLeft, payBlocked 
+      };
+    };
+
+    // Віддаємо відформатовані об'єкти з днями триалу
     res.json({ 
       ok: true, 
       stats: {
         totalDevices: totalDevices,
         todayDevices: todayDevices
       },
-      drivers: driversResult.rows,
-      passengers: passengersResult.rows
+      drivers: driversResult.rows.map(formatUser),
+      passengers: passengersResult.rows.map(formatUser)
     });
   } catch (err) { 
     console.error('Admin drivers fetch error:', err.message);
@@ -807,7 +844,9 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
       [parseInt(userId)]
     );
 
-    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів, аккаунт верифіковано. Можете повернутися в додаток.</p></body></html>');
+       // 🟢 ТЕКСТ ОБНОВЛЕН: Уведомление об успешной активации 30 дней подписки
+    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів, аккаунт верифіковано. Період користування успішно подовжено. Можете повернутися в додаток.</p></body></html>');
+
   } catch (err) {
     res.send('Помилка обробки платежу: ' + err.message);
   }
