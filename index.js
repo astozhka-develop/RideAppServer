@@ -273,7 +273,7 @@ app.post('/api/trips', async (req, res) => {
 });
 
 
-// 🚀 УМНЫЙ РАДАР РАЙДШЕРИНГА: Выдача координат в camelCase с полем departureTime и фильтром 25 минут!
+// 🚀 РОЗУМНИЙ РАДАР РАЙДШЕРИНГА: Повне узгодження індексів SQL (\$1, \$2, \$3, \$4) для виведення іконки!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const sLat = req.query.startLat || req.query.start_lat;
@@ -286,10 +286,11 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pStartLat = parseFloat(sLat);
     const pStartLon = parseFloat(sLon);
     
-    // Географический допуск (~2.5 км вокруг пассажира в Днепре)
+    // Географічний допуск (~2.5 км навколо пасажира в Дніпрі)
     const latDelta = 0.025; 
     const lonDelta = 0.03;
     
+    // 🔥 ФІКС: Індекси \$1, \$2, \$3, \$4 тепер строго відповідають порядку масиву аргументів!
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -309,10 +310,11 @@ app.get('/api/trips/drivers', async (req, res) => {
        WHERE t.role = 'driver' 
          AND t.status = 'searching' 
          AND u.is_verified = true
-         -- Ищем водителей из попутного района пассажира
+         -- $1 - pStartLat, $2 - latDelta
          AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
+         -- $3 - pStartLon, $4 - lonDelta
          AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-         -- Поездка водителя отображается на карте ровно 25 минут с момента старта
+         -- Рейс водія активний на радарі рівно 25 хвилин з моменту публікації
          AND t.created_at >= NOW() - INTERVAL '25 minutes'
        ORDER BY t.id DESC`,
       [pStartLat, latDelta, pStartLon, lonDelta]
@@ -324,8 +326,6 @@ app.get('/api/trips/drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
-
-
 
 
 
