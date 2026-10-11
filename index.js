@@ -254,20 +254,8 @@ app.get('/api/trips/drivers', async (req, res) => {
     const lonDelta = 0.03;
     
            // 🟢 ИСПРАВЛЕНО: Полный баланс косых кавычек и закрывающих скобок OSRM-радара восстановлен!
-    const result = await pool.query(
-      `SELECT t.id, t.user_id, t.start_lat, t.start_lon, t.end_lat, t.end_lon, 
-              t.start_address, t.end_address, t.departure_time,
-              u.name, u.phone, u.car_make, u.plate_number
-       FROM active_trips t
-       JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'driver'
-         AND t.status = 'searching'
-         AND u.is_verified = true
-         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
-         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-       ORDER BY t.id DESC`,
-      [pStartLat, latDelta, pStartLon, lonDelta]
-    );
+        // 🟢 ПУЛЕНЕПРОБИВАЕМЫЙ ВАРИАНТ: Обычные кавычки в одну строку полностью изолируют этот блок от низа файла!
+    const result = await pool.query('SELECT t.id, t.user_id, t.start_lat, t.start_lon, t.end_lat, t.end_lon, t.start_address, t.end_address, t.departure_time, u.name, u.phone, u.car_make, u.plate_number FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = \'driver\' AND t.status = \'searching\' AND u.is_verified = true AND t.start_lat BETWEEN $1 - $2 AND $1 + $2 AND t.start_lon BETWEEN $3 - $4 AND $3 + $4 ORDER BY t.id DESC', [pStartLat, latDelta, pStartLon, lonDelta]);
 
 
     // Внутренний маппинг formattedDrivers оставляем без изменений, он работает идеально!
