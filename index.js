@@ -9,7 +9,6 @@ const path = require('path');
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
-// В самом верху файла index.js (под app.use(cors())) добавьте парсер веб-форм:
 app.use(express.urlencoded({ extended: true }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
@@ -26,10 +25,10 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔥 ДОБАВЛЕНО: Настройка Multer для приема изображений авто
+// Настройка Multer для приема изображений авто
 const multer = require('multer');
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб на одну фотографию
+  limits: { fileSize: 5 * 1024 * 1024 }, 
   storage: multer.memoryStorage()
 });
 
@@ -39,7 +38,6 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
     if (!req.file) {
       return res.json({ ok: false, error: 'Файл не завантажено' });
     }
-    // Переводим картинку в формат Base64 для MVP хранения прямо в Supabase
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     res.json({ ok: true, carPhotoUrl: base64Image });
   } catch (err) {
@@ -52,7 +50,6 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-// 🚀 Реєстрація нового користувача З ПРИВ'ЯЗКОЮ ДО ID СМАРТФОНУ (Захист від абузу триалу)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, deviceId } = req.body;
@@ -60,19 +57,15 @@ app.post('/api/auth/register', async (req, res) => {
       return res.json({ ok: false, error: 'Заповніть обов\'язкові поля та ID пристрою!' });
     }
     
-    // Проверяем, зарегистрирован ли уже этот номер телефона
     const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone]);
     if (checkUser.rows.length > 0) return res.json({ ok: false, error: 'Користувач вже зареєстрований!' });
     
-    // 🔥 АНТИ-ХАКЕРСКИЙ ТРИГГЕР: Проверяем, светилось ли уже это устройство в реестре триалов
     const checkDevice = await pool.query('SELECT id FROM device_trials WHERE device_id = \$1', [deviceId]);
     if (checkDevice.rows.length === 0) {
-      // Если устройство новое — бережно заносим его в реестр девайсов
       await pool.query('INSERT INTO device_trials (device_id, first_registered_at) VALUES (\$1, NOW())', [deviceId]);
     }
     const password_hash = await bcrypt.hash(password, 10);
     
-    // Сохраняем пользователя, намертво привязывая к нему device_id смартфона
     const result = await pool.query(
       `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, is_verified, device_id) 
        VALUES ($1, $2, $3, $4, $5, $6, true, $7) RETURNING id`,
@@ -85,7 +78,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 🚀 Авторизація (Логін) — ІСПРАВЛЕНО ЧИТАННЯ ПОЛІВ ИЗ СУБД
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -104,7 +96,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.json({ ok: false, error: 'Невірний пароль' });
     }
     
-    // 🔥 ІСПРАВЛЕНО: Читаємо змінні строго у форматі snake_case, як они повернулися з бази Supabase!
     const token = jwt.sign(
       { id: user.id, role: user.role, isAdmin: user.is_admin || false }, 
       JWT_SECRET, 
@@ -118,7 +109,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 🚀 Отримання профілю — ІСПРАВЛЕНО ВИБІРКУ КОЛОНКИ IS_VERIFIED
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -126,7 +116,6 @@ app.get('/api/profile', async (req, res) => {
     const token = authHeader.replace(/^Bearer\s+/, '').trim(); 
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // 🔥 ДОБАВЛЕНО: u.is_verified в SELECT-запрос для проверки ручной блокировки!
     const result = await pool.query(
       `SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, 
               u.subscription_expires_at, u.device_id, u.is_verified,
@@ -146,8 +135,6 @@ app.get('/api/profile', async (req, res) => {
     
     let daysLeft = 0;
     let isBlocked = false;
-    
-    // 🟢 БЕСПЛАТНЫЙ ТРИАЛ РАСШИРЕН ДО 30 ДНЕЙ ПО ТЗ
     const trialPeriodMs = 30 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
@@ -163,13 +150,12 @@ app.get('/api/profile', async (req, res) => {
       daysLeft = 0;
       isBlocked = true;
     }
-    // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Читаем булево поле is_verified напрямую из объекта СУБД без кавычек!
+
     if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
       daysLeft = 0;
       isBlocked = true;
     }
        
-    // 🔥 Отправляем чистый camelCase объект в Android Retrofit
     res.json({ 
       ok: true, 
       user: {
@@ -189,13 +175,11 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-// 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
 app.put('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
-    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const token = authHeader.replace(/^Bearer\s+/, '').trim(); 
     const decoded = jwt.verify(token, JWT_SECRET);
     const { name, phone, carMake, plateNumber, carPhotoUrl } = req.body;
     
@@ -203,7 +187,6 @@ app.put('/api/profile', async (req, res) => {
       'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4, car_photo_url=$5 WHERE id=$6',
       [name, phone, carMake, plateNumber, carPhotoUrl || null, decoded.id]
     );
-    
     res.json({ ok: true });
   } catch (err) {
     console.error('Profile PUT error:', err.message);
@@ -219,7 +202,6 @@ app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
@@ -246,30 +228,48 @@ app.post('/api/trips', async (req, res) => {
           start_address = EXCLUDED.start_address,
           end_address = EXCLUDED.end_address,
           departure_time = EXCLUDED.departure_time,
-status = 'searching'
-RETURNING id`,
-[decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress, finalDepartureTime]
-);
-res.json({ ok: true, tripId: result.rows[0].id });
-} catch (err) {
-console.error('Trip creation error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
-}
+          status = 'searching'
+       RETURNING id`,
+      [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress, finalDepartureTime]
+    );
+    
+    res.json({ ok: true, tripId: result.rows[0].id });
+    
+  } catch (err) {
+    console.error('Trip creation error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
+  }
 });
-// 🚀 УМНЫЙ РАДАР: Всеядный camelCase/snake_case парсер координат с фильтром часовых поясов Днепра!
+
+// 🚀 УМНЫЙ РАДАР: Исправлен баланс скобок в конце pool.query!
 app.get('/api/trips/drivers', async (req, res) => {
-try {
-const sLat = req.query.startLat || req.query.start_lat;
-const sLon = req.query.startLon || req.query.start_lon;
-if (!sLat || !sLon) {
-return res.json({ ok: false, error: 'Пропущені координати пасажира' });
-}
-const pStartLat = parseFloat(sLat);
-const pStartLon = parseFloat(sLon);
-const latDelta = 0.025;
-const lonDelta = 0.03;
-const result = await pool.query(
-SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", t.departure_time AS "departureTime", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true AND t.start_lat BETWEEN $1 - $2 AND $1 + $2 AND t.start_lon BETWEEN $3 - $4 AND $3 + $4 AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours' ORDER BY t.id DESC,
+  try {
+    const sLat = req.query.startLat || req.query.start_lat;
+    const sLon = req.query.startLon || req.query.start_lon;
+    if (!sLat || !sLon) {
+        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
+    }
+    const pStartLat = parseFloat(sLat);
+    const pStartLon = parseFloat(sLon);
+    
+    const latDelta = 0.025; 
+    const lonDelta = 0.03;
+    
+    // 🟢 СИНТАКСИС ЗАКРЫТ ИДЕАЛЬНО: Лишняя запятая стёрта, скобка ) и точка с запятой ; установлены на место!
+    const result = await pool.query(
+      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
+t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
+t.departure_time AS "departureTime",
+u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
+FROM active_trips t
+JOIN users u ON t.user_id = u.id
+WHERE t.role = 'driver'
+AND t.status = 'searching'
+AND u.is_verified = true
+AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
+AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
+AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours'
+ORDER BY t.id DESC`,
 [pStartLat, latDelta, pStartLon, lonDelta]
 );
 res.json({ ok: true, drivers: result.rows });
@@ -298,7 +298,7 @@ if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verifie
 return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
 }
 if (currentAttempts >= 3) {
-return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
+return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для этого водія!' });
 }
 const nextAttemptNumber = currentAttempts + 1;
 const result = await pool.query(
