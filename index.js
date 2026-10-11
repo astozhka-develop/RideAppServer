@@ -331,54 +331,64 @@ app.post('/api/bids', async (req, res) => {
   }
 });
 
+// 🚀 1. ВОДИТЕЛЬ ПОЛУЧАЕТ ВХОДЯЩИЕ СТАВКИ: Кавычки 'pending' экранированы, синтаксис исправлен!
+app.get('/api/bids/driver/incoming', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { tripId } = req.query; 
+    if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
+
+    const result = await pool.query(
+      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", 
+              b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress"
+       FROM ride_bids b
+       JOIN users u ON b.passenger_id = u.id
+       JOIN active_trips t ON b.trip_id = t.id
+       WHERE b.driver_id = $1 AND b.status = 'pending'`,
+      [decoded.id]
+    );
+    res.json({ ok: true, bids: result.rows });
+  } catch (err) {
+    console.error('Incoming bids error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
+  }
+});
+
+// 🚀 2. ПАССАЖИР ПРОВЕРЯЕТ СТАТУС СТАВКИ: Кавычки полностью сбалансированы!
+app.get('/api/bids/status/passenger', async (req, res) => {
+  try {
+    const { tripId } = req.query;
+    if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
+    
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone"
+       FROM ride_bids b
+       JOIN users u ON b.driver_id = u.id
+       WHERE b.trip_id = $1
+       ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+    const topBid = result.rows[0];
+    res.json({ 
+      ok: true, 
+      status: topBid.status, 
+      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+    });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
+});
 
     
-app.get('/api/bids/driver/incoming', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-const token = authHeader.replace(/^Bearer\s+/, '').trim();
-const decoded = jwt.verify(token, JWT_SECRET);
-const { tripId } = req.query;
-if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
-const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
-[decoded.id]
-);
-res.json({ ok: true, bids: result.rows });
-} catch (err) {
-console.error('Incoming bids error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
-}
-});
-app.post('/api/bids/respond', async (req, res) => {
-try {
-const { bidId, status } = req.body;
-if (!bidId || !status) return res.json({ ok: false, error: 'Неповні дані запиту' });
-await pool.query("UPDATE ride_bids SET status = $1 WHERE id = $2", [status, bidId]);
-res.json({ ok: true });
-} catch (err) {
-console.error('Respond bid error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
-app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
-if (result.rows.length === 0) {
-return res.json({ ok: true, status: 'pending', driverPhone: null });
-}
-res.json({ ok: true, status: result.rows[0].status, driverPhone: result.rows[0].status === 'accepted' ? result.rows[0].driverPhone : null });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
