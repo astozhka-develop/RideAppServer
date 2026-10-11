@@ -463,6 +463,8 @@ const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET
 res.json({ ok: true, token });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
+
+
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -473,8 +475,10 @@ const totalQuery = await pool.query('SELECT COUNT()::int AS count FROM device_tr
 const totalDevices = totalQuery.rows[0].count;
 const todayQuery = await pool.query('SELECT COUNT()::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
 const todayDevices = todayQuery.rows[0].count;
-const driversResult = await pool.query(SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified" FROM users WHERE role = 'Водій' ORDER BY is_verified ASC, id DESC);
-const passengersResult = await pool.query(SELECT id, name, phone, is_verified AS "isVerified" FROM users WHERE role = 'Пасажир' ORDER BY is_verified ASC, id DESC);
+    // 🟢 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Добавлены косые кавычки вокруг SELECT-запросов админки!
+    const driversResult = await pool.query(`SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified" FROM users WHERE role = 'Водій' ORDER BY is_verified ASC, id DESC`);
+    const passengersResult = await pool.query(`SELECT id, name, phone, is_verified AS "isVerified" FROM users WHERE role = 'Пасажир' ORDER BY is_verified ASC, id DESC`);
+
 res.json({ ok: true, stats: { totalDevices, todayDevices }, drivers: driversResult.rows, passengers: passengersResult.rows });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
@@ -490,6 +494,7 @@ await pool.query('UPDATE users SET is_verified = $1 WHERE id = $2', [finalStatus
 res.json({ ok: true });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
+
 app.post('/api/admin/manual-subscription', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
@@ -499,7 +504,9 @@ if (!decoded.isAdmin) return res.json({ ok: false, error: 'У вас немає 
 const { phone } = req.body;
 const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone.trim()]);
 if (checkUser.rows.length === 0) return res.json({ ok: false, error: 'Не знайдено!' });
-await pool.query(UPDATE users SET subscription_expires_at = '2050-01-01 00:00:00+00' WHERE phone = $1, [phone.trim()]);
+    // 🟢 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Добавлены косые кавычки вокруг UPDATE-запроса выдачи безлимита!
+    await pool.query(`UPDATE users SET subscription_expires_at = '2050-01-01 00:00:00+00' WHERE phone = $1`, [phone.trim()]);
+
 res.json({ ok: true });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
