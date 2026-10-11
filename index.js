@@ -446,7 +446,7 @@ html += ' const response = await fetch("/api/admin/manual-subscription", { metho
 html += ' const data = await response.json();';
 html += ' if(data.ok) { alert("🟢 Безліміт активовано!"); document.getElementById("targetUserPhone").value = ""; }';
 // 🟢 ИСПРАВЛЕНО: Украинский апостроф заменен на безопасный код '
-html += ' } catch(err) { alert("Помилка з'єднання з сервером"); }';
+html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
 html += '}';
 html += '';
 res.send(html);
