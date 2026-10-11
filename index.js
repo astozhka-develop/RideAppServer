@@ -363,28 +363,36 @@ console.error('Respond bid error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
+
+// 🚀 ПАССАЖИР: Перевірка статусу ставки. Усі опечатки та зайві коми в кінці pool.query ВИПРАВЛЕНО!
 app.get('/api/bids/status/passenger', async (req, res) => {
-try {
-const { tripId } = req.query;
-if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
-if (result.rows.length === 0) {
-return res.json({ ok: true, status: 'pending', driverPhone: null });
-}
-const topBid = result.rows[0];
-res.json({
-ok: true,
-status: topBid.status,
-driverPhone: topBid.status === "accepted" ? topBid.driverPhone : null
+  try {
+    const { tripId } = req.query;
+    if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
+    
+    // 🟢 ИСПРАВЛЕНО: Запятая после LIMIT 1 стёрта, установлены правильные закрывающие скобка и точка с запятой
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone"
+       FROM ride_bids b
+       JOIN users u ON b.driver_id = u.id
+       WHERE b.trip_id = $1
+       ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ ok: true, status: 'pending', driverPhone: null });
+    }
+    const topBid = result.rows[0];
+    res.json({ ok: true, status: topBid.status, driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null });
+  } catch (err) {
+    console.error('Status error:', err.message);
+    res.json({ ok: false, error: err.message });
+  }
 });
-} catch (err) {
-console.error('Status error:', err.message);
-res.json({ ok: false, error: err.message });
-}
-});
+
+
+
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
