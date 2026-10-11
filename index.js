@@ -499,7 +499,7 @@ html += ' try {';
 html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
 html += ' const data = await response.json();';
 html += ' if(data.ok) { alert("🟢 Безліміт активовано!"); document.getElementById("targetUserPhone").value = ""; }';
-html += ' } catch(err) { alert("Помилка з'єднання"); }';
+html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
 html += '}';
 html += '';
 res.send(html);
@@ -516,6 +516,7 @@ const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET
 res.json({ ok: true, token });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
+    
 app.get('/api/admin/unverified-drivers', async (req, res) => {
 try {
 const authHeader = req.headers['authorization'];
