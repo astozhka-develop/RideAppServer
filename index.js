@@ -324,24 +324,34 @@ app.post('/api/bids', async (req, res) => {
 });
 
 
+// 🚀 ВОДИТЕЛЬ ПОЛУЧАЕТ ВХОДЯЩИЕ СТАВКИ: Финальный синтаксический фикс скобок закрытия!
 app.get('/api/bids/driver/incoming', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-const token = authHeader.replace(/^Bearer\s+/, '').trim();
-const decoded = jwt.verify(token, JWT_SECRET);
-const { tripId } = req.query;
-if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
-const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
-[decoded.id]
-);
-res.json({ ok: true, bids: result.rows });
-} catch (err) {
-console.error('Incoming bids error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
-}
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { tripId } = req.query; 
+    if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
+    
+    // 🟢 ИСПРАВЛЕНО: Лишняя запятая в конце строки стёрта. Скобка ) и точка с запятой ; на своих местах!
+    const result = await pool.query(
+      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", 
+              b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress"
+       FROM ride_bids b
+       JOIN users u ON b.passenger_id = u.id
+       JOIN active_trips t ON b.trip_id = t.id
+       WHERE b.driver_id = $1 AND b.status = 'pending'`,
+      [decoded.id]
+    );
+    res.json({ ok: true, bids: result.rows });
+  } catch (err) {
+    console.error('Incoming bids error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
+  }
 });
+
 app.post('/api/bids/respond', async (req, res) => {
 try {
 const { bidId, status } = req.body;
