@@ -511,40 +511,73 @@ res.json({ ok: true });
 } catch (err) { res.json({ ok: false, error: err.message }); }
 });
 // ==========================================
-// 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK
+// 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
 // ==========================================
+
 app.post('/api/payment/create-invoice', async (req, res) => {
-try {
-const authHeader = req.headers['authorization'];
-const token = authHeader.replace(/^Bearer\s+/, '').trim();
-const decoded = jwt.verify(token, JWT_SECRET);
-const testPaymentUrl = https://onrender.com{decoded.id};
-res.json({ ok: true, paymentUrl: testPaymentUrl });
-} catch (err) { res.json({ ok: false, error: err.message }); }
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    
+    const parts = authHeader.split(' ');
+    // 🔥 ИСПРАВЛЕНО: Безопасное извлечение токена независимо от формата (Bearer или чистый)
+    const token = parts.length > 1 ? parts[1] : parts[0];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
+    res.json({ ok: true, paymentUrl: testPaymentUrl });
+  } catch (err) {
+    console.error('Invoice creation error:', err.message);
+    res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
+  }
 });
+
+
+// 🚀 2. Веб-страница симулятора оплаты Monobank (Mono Pay)
 app.get('/payment/simulator', (req, res) => {
-const userId = req.query.userId;
-let html = 'Monobank | Тестова Оплата';
-html += '';
-html += 'monobankТестова оплата підписки Diway150.00 ₴';
-html += 'УСПІШНО СПЛАТИТИ';
-html += '';
-res.send(html);
+  const userId = req.query.userId;
+  let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
+  html += '<title>Monobank | Тестова Оплата</title><style>';
+  html += 'body{font-family:sans-serif;background-color:#FFF;margin:0;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh;}';
+  html += '.card{max-width:400px;width:100%;border:2px solid #E0E0E0;padding:30px;border-radius:20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.05);}';
+  html += 'h2{color:#FF1744;margin-bottom:10px;}';
+  html += '.price{font-size:32px;font-weight:bold;margin:20px 0;color:#212121;}';
+  html += 'button{width:100%;height:54px;background-color:#212121;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
+  html += '</style></head><body>';
+  html += '<div class="card"><h2>monobank | fono pay</h2><p>Тестова оплата підписки Diway</p>';
+  html += '<div class="price">150.00 ₴</div>';
+  html += '<form action="/api/payment/webhook-simulation" method="POST">';
+  html += '<input type="hidden" name="userId" value="' + userId + '">';
+  html += '<button type="submit">УСПІШНО СПЛАТИТИ 150 ГРН</button></form></div>';
+  html += '</body></html>';
+  res.send(html);
 });
+
+// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
+// 🚀 ОБНОВЛЕННЫЙ ВЕБХУК: Автоматически продлевает подписку И разблокирует пользователя!
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
-try {
-const { userId } = req.body;
-if (!userId) return res.send('Помилка: Не вказано ID');
-await pool.query(UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days', is_verified = true WHERE id = $1, [parseInt(userId)]);
-res.send('🟢 Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
-} catch (err) { res.send('Помилка: ' + err.message); }
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.send('Помилка: Не вказано ID користувача');
+
+    // 🔥 ИСПРАВЛЕНО: Одновременно сдвигаем подписку на 30 дней И включаем is_verified = true, чтобы снять блок!
+    await pool.query(
+      `UPDATE users 
+       SET subscription_expires_at = NOW() + INTERVAL '30 days',
+           is_verified = true 
+       WHERE id = $1`,
+      [parseInt(userId)]
+    );
+
+    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів, аккаунт верифіковано. Можете повернутися в додаток.</p></body></html>');
+  } catch (err) {
+    res.send('Помилка обробки платежу: ' + err.message);
+  }
 });
-// 🧹 Фоновая очистка старых рейсов (5 часов)
-setInterval(async () => {
-try {
-await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
-} catch (err) { console.error(err.message); }
-}, 1000 * 60 * 60);
+
+// ==========================================
+// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
+// ==========================================
 app.listen(PORT, () => {
-console.log(🚀 Server is running smoothly on port ${PORT});
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
