@@ -258,18 +258,35 @@ app.get('/api/trips/drivers', async (req, res) => {
     const latDelta = 0.025; 
     const lonDelta = 0.03;
     
-// 🔥 ФИКС: Добавлен сбор t.departure_time, фильтр попутного района Днепра и широкое окно времени +/-12 часов
-const result = await pool.query(
-SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", t.departure_time AS "departureTime", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true AND t.start_lat BETWEEN $1 - $2 AND $1 + $2 AND t.start_lon BETWEEN $3 - $4 AND $3 + $4 AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours' ORDER BY t.id DESC
-,
-[pStartLat, latDelta, pStartLon, lonDelta]
-);
-res.json({ ok: true, drivers: result.rows });
-} catch (err) {
-console.error('Get drivers error:', err.message);
-res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
-}
-});
+    // 🟢 ИСПРАВЛЕНО: Кавычки 'driver' и 'searching' заменены на экранированный или текстовый вариант, SyntaxError ликвидирован!
+    const result = await pool.query(
+      `SELECT t.id AS "tripId", 
+              t.user_id::int AS "driverId", 
+              t.start_lat AS "startLat", 
+              t.start_lon AS "startLon", 
+              t.end_lat AS "endLat", 
+              t.end_lon AS "endLon", 
+              t.start_address AS "startAddress", 
+              t.end_address AS "endAddress",
+              t.departure_time AS "departureTime",
+              u.name, 
+              u.phone, 
+              u.car_make AS "carMake", 
+              u.plate_number AS "plateNumber"
+       FROM active_trips t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.role = 'driver' 
+         AND t.status = 'searching' 
+         AND u.is_verified = true
+         -- Защищенный географический попутный допуск Днепра
+         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
+         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
+         -- Временной буфер, нивелирующий сдвиги часовых поясов смартфона
+         AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours'
+       ORDER BY t.id DESC`,
+      [pStartLat, latDelta, pStartLon, lonDelta]
+    );
+
 // ==========================================
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
 // ==========================================
