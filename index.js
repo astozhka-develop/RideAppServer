@@ -6,12 +6,9 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs'); 
 const { Pool } = require('pg');
 const path = require('path');
-
-
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
-// В самом верху файла index.js (под app.use(cors())) добавьте парсер веб-форм:
 app.use(express.urlencoded({ extended: true }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
@@ -28,10 +25,10 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔥 ДОБАВЛЕНО: Настройка Multer для приема изображений авто
+// Настройка Multer для приема изображений авто
 const multer = require('multer');
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // Лимит: 5 Мб на одну фотографию
+  limits: { fileSize: 5 * 1024 * 1024 }, 
   storage: multer.memoryStorage()
 });
 
@@ -41,7 +38,6 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
     if (!req.file) {
       return res.json({ ok: false, error: 'Файл не завантажено' });
     }
-    // Переводим картинку в формат Base64 для MVP хранения прямо в Supabase
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     res.json({ ok: true, carPhotoUrl: base64Image });
   } catch (err) {
@@ -54,7 +50,6 @@ app.post('/api/upload/car-photo', upload.single('photo'), async (req, res) => {
 // 🔐 БЛОК АВТОРИЗАЦИИ И ПОЛЬЗОВАТЕЛЕЙ
 // ==========================================
 
-// 🚀 Реєстрація нового користувача З ПРИВ'ЯЗКОЮ ДО ID СМАРТФОНУ (Захист від абузу триалу)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, role, password, carMake, plateNumber, deviceId } = req.body;
@@ -62,20 +57,15 @@ app.post('/api/auth/register', async (req, res) => {
       return res.json({ ok: false, error: 'Заповніть обов\'язкові поля та ID пристрою!' });
     }
     
-    // Проверяем, зарегистрирован ли уже этот номер телефона
     const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone]);
     if (checkUser.rows.length > 0) return res.json({ ok: false, error: 'Користувач вже зареєстрований!' });
     
-    // 🔥 АНТИ-ХАКЕРСКИЙ ТРИГГЕР: Проверяем, светилось ли уже это устройство в реестре триалов
     const checkDevice = await pool.query('SELECT id FROM device_trials WHERE device_id = \$1', [deviceId]);
     if (checkDevice.rows.length === 0) {
-      // Если устройство новое — бережно заносим его в реестр девайсов
       await pool.query('INSERT INTO device_trials (device_id, first_registered_at) VALUES (\$1, NOW())', [deviceId]);
     }
-
     const password_hash = await bcrypt.hash(password, 10);
     
-    // Сохраняем пользователя, намертво привязывая к нему device_id смартфона
     const result = await pool.query(
       `INSERT INTO users (name, phone, password_hash, role, car_make, plate_number, is_verified, device_id) 
        VALUES ($1, $2, $3, $4, $5, $6, true, $7) RETURNING id`,
@@ -88,8 +78,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-
-// 🚀 Авторизація (Логін) — ІСПРАВЛЕНО ЧИТАННЯ ПОЛІВ ИЗ СУБД
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -103,13 +91,11 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const user = result.rows[0]; 
-    
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return res.json({ ok: false, error: 'Невірний пароль' });
     }
     
-    // 🔥 ІСПРАВЛЕНО: Читаємо змінні строго у форматі snake_case, як вони повернулися з бази Supabase!
     const token = jwt.sign(
       { id: user.id, role: user.role, isAdmin: user.is_admin || false }, 
       JWT_SECRET, 
@@ -123,16 +109,13 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-
-// 🚀 Отримання профілю — ІСПРАВЛЕНО ВИБІРКУ КОЛОНКИ IS_VERIFIED
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена' });
-    const token = authHeader.split(' ')[1]; 
+    const token = authHeader.replace(/^Bearer\s+/, '').trim(); 
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // 🔥 ДОБАВЛЕНО: u.is_verified в SELECT-запрос для проверки ручной блокировки!
     const result = await pool.query(
       `SELECT u.id, u.name, u.phone, u.role, u.car_make, u.plate_number, 
               u.subscription_expires_at, u.device_id, u.is_verified,
@@ -143,20 +126,16 @@ app.get('/api/profile', async (req, res) => {
       [decoded.id]
     );
     
-        if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
-    
-    // 🔥 ИСПРАВЛЕНО: Достаем одиночный объект пользователя из массива результатов PostgreSQL!
+    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
     const user = result.rows[0];
     
     const now = new Date();
     const deviceRegisteredAt = user.first_registered_at ? new Date(user.first_registered_at) : new Date();
     const subscriptionExpiresAt = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
     
-        // 🟢 ИСПРАВЛЕНО: Бесплатный триал-период расширен до 30 дней!
+    // 🟢 ПЕРИОД РАСШИРЕН ДО 30 ДНЕЙ
     let daysLeft = 0;
     let isBlocked = false;
-    
-    // Переводим 30 дней в миллисекунды для системного таймера
     const trialPeriodMs = 30 * 24 * 60 * 60 * 1000;
     const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
     
@@ -173,14 +152,11 @@ app.get('/api/profile', async (req, res) => {
       isBlocked = true;
     }
 
-
-    // 🔥 ИСПРАВЛЕНО СИНТАКСИС: Читаем булево поле is_verified напрямую из объекта СУБД без кавычек!
     if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
       daysLeft = 0;
       isBlocked = true;
     }
        
-    // 🔥 Отправляем чистый camelCase объект в Android Retrofit
     res.json({ 
       ok: true, 
       user: {
@@ -200,19 +176,11 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-
-
-
-// 🚀 Оновлення даних профілю водія (ИСПРАВЛЕН ИНДЕКС ТОКЕНА)
 app.put('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
-    const parts = authHeader.split(' ');
-    // 🔥 ИСПРАВЛЕНО: Берем именно первый индекс массива — саму JWT строку!
-    const token = parts[1]; 
-    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim(); 
     const decoded = jwt.verify(token, JWT_SECRET);
     const { name, phone, carMake, plateNumber, carPhotoUrl } = req.body;
     
@@ -220,7 +188,6 @@ app.put('/api/profile', async (req, res) => {
       'UPDATE users SET name=$1, phone=$2, car_make=$3, plate_number=$4, car_photo_url=$5 WHERE id=$6',
       [name, phone, carMake, plateNumber, carPhotoUrl || null, decoded.id]
     );
-    
     res.json({ ok: true });
   } catch (err) {
     console.error('Profile PUT error:', err.message);
@@ -229,39 +196,43 @@ app.put('/api/profile', async (req, res) => {
 });
 
 // ==========================================
-// 🗺️ БЛОК ПОЕЗДОК (УМНЫЙ РАДАР РАЙДШЕРИНГА)
+// 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
-// 🚀 1. Створення активного маршруту з урахуванням часу виїзду
+// 🚀 1. Роут Створення/Оновлення рейсу (Принимает и фиксирует departureTime!)
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
     const checkUserStatus = await pool.query('SELECT is_verified FROM users WHERE id = \$1', [decoded.id]);
     if (checkUserStatus.rows.length === 0 || checkUserStatus.rows[0].is_verified === false) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією Diway.' });
+      return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
     }
     
-    // 🔥 Принимаем departureTime с Android (в формате ISO строки, например: "2026-10-10T08:00:00Z")
+    // 🔥 ФИКС: Явно вытаскиваем departureTime, присланный со смартфона Водителя!
     const { role, startLat, startLon, endLat, endLon, startAddress, endAddress, departureTime } = req.body;
-    
-    // Перед созданием нового маршрута гасим старые поиски этого же пользователя
-    await pool.query(
-      "UPDATE active_trips SET status = 'cancelled' WHERE user_id = \$1 AND status = 'searching'",
-      [decoded.id]
-    );
     
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
-    const finalDepartureTime = departureTime || new Date().toISOString(); // Если время не передано — берем текущее NOW()
+    const finalDepartureTime = departureTime || new Date().toISOString(); 
     
     const result = await pool.query(
-      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, departure_time, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', $9, NOW()) RETURNING id`,
+      `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, departure_time) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', $9) 
+       ON CONFLICT (user_id) 
+       DO UPDATE SET 
+          start_lat = EXCLUDED.start_lat, 
+          start_lon = EXCLUDED.start_lon,
+          end_lat = EXCLUDED.end_lat,
+          end_lon = EXCLUDED.end_lon,
+          start_address = EXCLUDED.start_address,
+          end_address = EXCLUDED.end_address,
+          departure_time = EXCLUDED.departure_time,
+          status = 'searching'
+       RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress, finalDepartureTime]
     );
     
@@ -272,8 +243,7 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
-
-// 🚀 РОЗУМНИЙ РАДАР РАЙДШЕРИНГА: Повне узгодження індексів SQL (\$1, \$2, \$3, \$4) для виведення іконки!
+// 🚀 2. Роут Пошуку Водіїв (Всеядный camelCase/snake_case парсер координат с фильтром часовых поясов)
 app.get('/api/trips/drivers', async (req, res) => {
   try {
     const sLat = req.query.startLat || req.query.start_lat;
@@ -282,616 +252,305 @@ app.get('/api/trips/drivers', async (req, res) => {
     if (!sLat || !sLon) {
         return res.json({ ok: false, error: 'Пропущені стартові координати пасажира' });
     }
-    
     const pStartLat = parseFloat(sLat);
     const pStartLon = parseFloat(sLon);
     
-    // Географічний допуск (~2.5 км навколо пасажира в Дніпрі)
     const latDelta = 0.025; 
     const lonDelta = 0.03;
     
-    // 🔥 ФІКС: Індекси \$1, \$2, \$3, \$4 тепер строго відповідають порядку масиву аргументів!
-    const result = await pool.query(
-      `SELECT t.id AS "tripId", 
-              t.user_id::int AS "driverId", 
-              t.start_lat AS "startLat", 
-              t.start_lon AS "startLon", 
-              t.end_lat AS "endLat", 
-              t.end_lon AS "endLon", 
-              t.start_address AS "startAddress", 
-              t.end_address AS "endAddress",
-              t.departure_time AS "departureTime",
-              u.name, 
-              u.phone, 
-              u.car_make AS "carMake", 
-              u.plate_number AS "plateNumber"
-       FROM active_trips t
-       JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'driver' 
-         AND t.status = 'searching' 
-         AND u.is_verified = true
-         -- $1 - pStartLat, $2 - latDelta
-         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
-         -- $3 - pStartLon, $4 - lonDelta
-         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-         -- Рейс водія активний на радарі рівно 25 хвилин з моменту публікації
-         AND t.created_at >= NOW() - INTERVAL '25 minutes'
-       ORDER BY t.id DESC`,
-      [pStartLat, latDelta, pStartLon, lonDelta]
-    );
-    
-    res.json({ ok: true, drivers: result.rows });
-  } catch (err) {
-    console.error('Get drivers error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
-  }
+// 🔥 ФИКС: Добавлен сбор t.departure_time, фильтр попутного района Днепра и широкое окно времени +/-12 часов
+const result = await pool.query(
+SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", t.departure_time AS "departureTime", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = 'driver' AND t.status = 'searching' AND u.is_verified = true AND t.start_lat BETWEEN $1 - $2 AND $1 + $2 AND t.start_lon BETWEEN $3 - $4 AND $3 + $4 AND t.departure_time BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '12 hours' ORDER BY t.id DESC
+,
+[pStartLat, latDelta, pStartLon, lonDelta]
+);
+res.json({ ok: true, drivers: result.rows });
+} catch (err) {
+console.error('Get drivers error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
+}
 });
-
-
-
-
 // ==========================================
 // 💰 БЛОК СТАВОК (ТОРГИ И ПУШ-СИСТЕМА ДЛЯ MVP)
 // ==========================================
-
-// 🚀 Пасажир робить ставку вибраному водію — ИСПРАВЛЕН ИНДЕКС СТРОКИ COUNT
 app.post('/api/bids', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    const parts = authHeader.split(' ');
-    const token = parts[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-    
-    const checkAttempts = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM ride_bids 
-       WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
-      [tripId, decoded.id, driverId]
-    );
-    
-    // 🔥 ИСПРАВЛЕНО: Извлекаем count из первой строки [0] массива результатов!
-    const currentAttempts = checkAttempts.rows[0].count;
-    // 🔥 ИСПРАВЛЕНО: Проверяем, не заблокирован ли водитель в Supabase прямо перед записью ставки!
-    const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
-    if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
-      return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
-    }
-    if (currentAttempts >= 3) {
-      return res.json({ 
-        ok: false, 
-        error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' 
-      });
-    }
-    const nextAttemptNumber = currentAttempts + 1;
-    
-    const result = await pool.query(
-      `INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
-      [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
-    );
-    res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
-  } catch (err) {
-    console.error('Bid creation error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
-  }
+try {
+const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+const { tripId, driverId, proposedPrice, passengerCount } = req.body;
+const checkAttempts = await pool.query(
+SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3,
+[tripId, decoded.id, driverId]
+);
+const currentAttempts = checkAttempts.rows[0].count;
+const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
+if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
+return res.json({ ok: false, error: 'Доступ обмежено! Цей водій заблокований адміністрацією Diway.' });
+}
+if (currentAttempts >= 3) {
+return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
+}
+const nextAttemptNumber = currentAttempts + 1;
+const result = await pool.query(
+INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
+[tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
+);
+res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
+} catch (err) {
+console.error('Bid creation error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера при створенні ставки: ' + err.message });
+}
 });
-
-
-// 🚀 Водитель запрашивает входящие ставки для своей поездки (Исправлен синтаксис скобок!)
 app.get('/api/bids/driver/incoming', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    const { tripId } = req.query; 
-    if (!tripId) {
-      return res.json({ ok: false, error: 'Пропущений tripId водія' });
-    }
-
-    // 🔥 ИСПРАВЛЕНО: Закрывающая скобка ) возвращена строго на место после кавычки `
-    const result = await pool.query(
-      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", 
-              b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress"
-       FROM ride_bids b
-       JOIN users u ON b.passenger_id = u.id
-       JOIN active_trips t ON b.trip_id = t.id
-       WHERE b.driver_id = $1 AND b.status = 'pending'`,
-      [decoded.id]
-    );
-
-    res.json({ ok: true, bids: result.rows });
-  } catch (err) {
-    console.error('Incoming bids error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
-  }
+try {
+const authHeader = req.headers['authorization'];
+if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+const { tripId } = req.query;
+if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
+const result = await pool.query(
+SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
+[decoded.id]
+);
+res.json({ ok: true, bids: result.rows });
+} catch (err) {
+console.error('Incoming bids error:', err.message);
+res.json({ ok: false, error: 'Помилка сервера радара водія: ' + err.message });
+}
 });
-// 🚀 Водитель принимает или отклоняет ставку
 app.post('/api/bids/respond', async (req, res) => {
 try {
 const { bidId, status } = req.body;
-if (!bidId || !status) {
-return res.json({ ok: false, error: 'Неповні дані запиту' });
-}
-await pool.query(
-"UPDATE ride_bids SET status = $1 WHERE id = $2",
-[status, bidId]
-);
+if (!bidId || !status) return res.json({ ok: false, error: 'Неповні дані запиту' });
+await pool.query("UPDATE ride_bids SET status = $1 WHERE id = $2", [status, bidId]);
 res.json({ ok: true });
 } catch (err) {
 console.error('Respond bid error:', err.message);
 res.json({ ok: false, error: err.message });
 }
 });
-// 🚀 Регулярный опрос статуса ставки для Пассажира (Синтаксис скобок исправлен на 100%)
 app.get('/api/bids/status/passenger', async (req, res) => {
-  try {
-    const { tripId } = req.query;
-    if (!tripId) {
-      return res.json({ ok: false, error: 'Пропущений tripId' });
-    }
-    
-    // 🔥 ИСПРАВЛЕНО: Закрывающая скобка ) возвращена на место после косой кавычки `
-    const result = await pool.query(
-      `SELECT b.status, u.phone AS "driverPhone"
-       FROM ride_bids b
-       JOIN users u ON b.driver_id = u.id
-       WHERE b.trip_id = $1
-       ORDER BY b.id DESC LIMIT 1`,
-      [tripId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ ok: true, status: 'pending', driverPhone: null });
-    }
-
-    const topBid = result.rows[0];
-
-    res.json({ 
-      ok: true, 
-      status: topBid.status, 
-      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
-    });
-  } catch (err) {
-    console.error('Status error:', err.message);
-    res.json({ ok: false, error: err.message });
-  }
+try {
+const { tripId } = req.query;
+if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
+const result = await pool.query(
+SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
+[tripId]
+);
+if (result.rows.length === 0) {
+return res.json({ ok: true, status: 'pending', driverPhone: null });
+}
+res.json({ ok: true, status: result.rows[0].status, driverPhone: result.rows[0].status === 'accepted' ? result.rows[0].driverPhone : null });
+} catch (err) {
+console.error('Status error:', err.message);
+res.json({ ok: false, error: err.message });
+}
 });
 // ==========================================
-// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
+// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА
 // ==========================================
-
-// Перенаправление с главной страницы на админку
-app.get('/', (req, res) => {
-  res.redirect('/admin');
-});
-
-// ==========================================
-// 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
-// ==========================================
+app.get('/', (req, res) => { res.redirect('/admin'); });
 app.get('/admin', (req, res) => {
-  let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
-  html += '<title>Панель Admin Diway</title><style>';
-  html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
-  html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
-  html += '.dashboard-container{max-width:800px;margin:20px auto;display:none;}';
-  html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
-  html += '.form-group{margin-bottom:20px;}';
-  html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
-  html += 'input{width:100%;height:54px;padding:0 16px;border:1.5px solid #E0E0E0;border-radius:12px;font-size:16px;box-sizing:border-box;}';
-  html += 'button{width:100%;height:56px;background-color:#0D47A1;color:#FFFFFF;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
-  html += '.driver-card{background:#FFFFFF;border:1.5px solid #E0E0E0;border-radius:16px;padding:20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}';
-  html += '.badge{display:inline-block;padding:4px 12px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-weight:bold;font-size:12px;}';
-  html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
-  html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
-  html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
-  html += '</style></head><body>';
-  html += '<div class="auth-container" id="authBlock"><h2>Вхід до Diway Admin</h2>';
-  html += '<div class="form-group"><label>Номер телефону</label><input type="text" id="adminPhone" placeholder="+380..."></div>';
-  html += '<div class="form-group"><label>Код безпеки (2FA)</label><input type="text" id="adminCode" placeholder="777999" maxlength="6" style="text-align:center;font-weight:bold;"></div>';
-  html += '<button onclick="loginAdmin()">ПІДТВЕРДИТИ ВХІД</button></div>';
-  
-  html += '<div class="dashboard-container" id="dashboardBlock"><h2>Панель Адміністратора Diway</h2>';
-    // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Окна живой статистики уникальных устройств
-  html += '<div style="display:flex; gap:20px; margin-bottom:24px;">';
-  html += '  <div style="flex:1; background:#0D47A1; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(13,71,161,0.05);">';
-  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📊 ВСЬОГО УНІКАЛЬНИХ ПРИСТРОЇВ</div>';
-  html += '    <div id="statTotalUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
-  html += '  </div>';
-  html += '  <div style="flex:1; background:#10B981; color:#FFF; padding:20px; border-radius:16px; text-align:center; box-shadow:0 8px 20px rgba(16,185,129,0.05);">';
-  html += '    <div style="font-size:14px; font-weight:bold; opacity:0.9;">📈 НОВИХ ПРИСТРОЇВ (ЗА СЬОГОДНІ)</div>';
-  html += '    <div id="statTodayUsers" style="font-size:36px; font-weight:bold; margin-top:8px;">0</div>';
-  html += '  </div>';
-  html += '</div>';
-
-  html += '<div class="admin-section"><h3>🛠️ Ручне керування підписками </h3>';
-  html += '<p style="font-size:13px; color:#666; margin-bottom:12px;">Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року</p>';
-  html += '<div style="display:flex; gap:10px; margin-bottom:10px;">';
-  html += '<input type="text" id="targetUserPhone" placeholder="+380XXXXXXXXX" style="flex:1; height:48px;">';
-  html += '<button onclick="grantManualSubscription()" style="width:200px; height:48px; background-color:#212121;">ВИДАТИ БЕЗЛІМІТ</button>';
-  html += '</div></div>';
-
-  html += '<h3>📋 Усі зареєстровані користувачі та керування доступом</h3>';
-  html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
-  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
-  
-  html += '<script>';
-  html += 'let adminToken = "";';
-  html += 'async function loginAdmin() {';
-  html += '  const phone = document.getElementById("adminPhone").value.trim();';
-  html += '  const code = document.getElementById("adminCode").value.trim();';
-  html += '  if(!phone || !code) { alert("Заповніть всі поля!"); return; }';
-  html += '  try {';
-  html += '    const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });';
-  html += '    const data = await response.json();';
-  html += '    if (data.ok) { adminToken = data.token; document.getElementById("authBlock").style.display = "none"; document.getElementById("dashboardBlock").style.display = "block"; loadUnverifiedDrivers(); }';
-  html += '    else { alert("Відмовлено: " + data.error); }';
-  html += '  } catch (err) { alert("Помилка мережі при вході"); }';
-  html += '}';
-    // 🔥 ИСПРАВЛЕНО: Полный переход на шаблонные косые кавычки ` ` убирает любые конфликты экранирования!
-  html += `async function loadUnverifiedDrivers() {
-    try {
-      const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });
-      const data = await response.json();
-      // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Передача цифр из ответа сервера в HTML-окна
-      if (data.stats) {
-        document.getElementById("statTotalUsers").innerText = data.stats.totalDevices || 0;
-        document.getElementById("statTodayUsers").innerText = data.stats.todayDevices || 0;
-      }
-      
-      if (!data.ok) {
-        document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Помилка сервера: " + data.error + "</div>";
-        document.getElementById("passengersList").innerHTML = "<div class='no-data'>-</div>";
-        return;
-      }
-      
-            // ОТРИСОВКА ВОДИТЕЛЕЙ
-      const listDiv = document.getElementById("driversList");
-      listDiv.innerHTML = "";
-      if (data.drivers && data.drivers.length > 0) {
-        data.drivers.forEach(driver => {
-          const card = document.createElement("div"); card.className = "driver-card";
-          
-          // 🟢 ВСТАВЛЕНО: Строгое определение активности водителя
-          let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
-          
-          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки теперь переключаются на основе переменной isDriverActive
-          let statusBadge = isDriverActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
-          let actionButton = isDriverActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + driver.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + driver.id + ", true)'>РОЗБЛОКУВАТИ</button>";
-          
-          card.innerHTML = "<div class='driver-info'><h3>" + driver.name + " " + statusBadge + "</h3><p>Тел: " + driver.phone + "</p><p><span class='badge'>" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")</span></p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
-          listDiv.appendChild(card);
-        });
-      } else { listDiv.innerHTML = "<div class='no-data'>Водіїв не знайдено.</div>"; }
-      
-      // ОТРИСОВКА ПАССАЖИРОВ
-      const passDiv = document.getElementById("passengersList");
-      passDiv.innerHTML = "";
-      if (data.passengers && data.passengers.length > 0) {
-        data.passengers.forEach(pass => {
-          const card = document.createElement("div"); card.className = "driver-card";
-          
-          // 🟢 ВСТАВЛЕНО: Строгое определение активности пассажира
-          let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
-          
-          // 🟢 ВСТАВЛЕНО: Бейджи и кнопки пассажиров на основе переменной isPassengerActive
-          let statusBadge = isPassengerActive ? "<span class='badge' style='background:#D1FAE5; color:#065F46;'>Активний</span>" : "<span class='badge' style='background:#FEE2E2; color:#991B1B;'>ЗАБЛОКОВАНИЙ</span>";
-          let actionButton = isPassengerActive ? "<button class='btn-approve' style='background-color:#EF4444;' onclick='toggleDriverBlock(" + pass.id + ", false)'>ЗАБЛОКУВАТИ</button>" : "<button class='btn-approve' style='background-color:#10B981;' onclick='toggleDriverBlock(" + pass.id + ", true)'>РОЗБЛОКУВАТИ</button>";
-          
-          card.innerHTML = "<div class='driver-info'><h3>" + pass.name + " " + statusBadge + "</h3><p>Тел: " + pass.phone + "</p></div><div class='actions'><div style='display:flex; gap:10px;'>" + actionButton + "</div></div>";
-          passDiv.appendChild(card);
-        });
-      } else { passDiv.innerHTML = "<div class='no-data'>Пасажирів не знайдено.</div>"; }
-      
-    } catch (err) {
-
-      document.getElementById("driversList").innerHTML = "<div class='no-data' style='color:#EF4444;'>Критична помилка: " + err.message + "</div>";
-      document.getElementById("passengersList").innerHTML = "<div class='no-data'>-</div>";
-    }
-  };`;
-
-  
-  html += 'async function toggleDriverBlock(driverId, setActivate) {';
-  html += '  let confirmAction = confirm(setActivate ? "Розблокувати цього водія?" : "🚨 Ви впевнені, що хочете ЗАБЛОКУВАТИ цього водія? Його радар буде вимкнено!");';
-  html += '  if (!confirmAction) return;';
-  html += '  try {';
-  html += '    const response = await fetch("/api/admin/verify-driver", {';
-  html += '      method: "POST",';
-  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
-  html += '      body: JSON.stringify({ driverId, activeStatus: setActivate })';
-  html += '    });';
-  html += '    const data = await response.json();';
-  html += '    if (data.ok) { alert(setActivate ? "Водія успішно розблоковано!" : "🔴 Водія успішно заблоковано в Supabase!"); loadUnverifiedDrivers(); }';
-  html += '    else { alert("Помилка: " + data.error); }';
-  html += '  } catch (err) { alert("Помилка сервера"); }';
-  html += '}';
-  
-  html += 'async function grantManualSubscription() {';
-  html += '  const phone = document.getElementById("targetUserPhone").value.trim();';
-  html += '  if(!phone) { alert("Введіть номер телефону!"); return; }';
-  html += '  try {';
-  html += '    const response = await fetch("/api/admin/manual-subscription", {';
-  html += '      method: "POST",';
-  html += '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },';
-  html += '      body: JSON.stringify({ phone })';
-  html += '    });';
-  html += '    const data = await response.json();';
-  html += '    if(data.ok) { alert("🟢 Тестовий безліміт успішно активовано до 2050 року!"); document.getElementById("targetUserPhone").value = ""; }';
-  html += '    else { alert("❌ Помилка: " + data.error); }';
-  html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
-  html += '}';
-  
-  html += '</script></body></html>';
-  res.send(html);
+let html = '';
+html += 'Панель Admin Diway';
+html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
+html += '.auth-container,.dashboard-container{max-width:500px;margin:40px auto;background:#FFFFFF;padding:40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.05);}';
+html += '.dashboard-container{max-width:800px;margin:20px auto;display:none;}';
+html += 'h2{text-align:center;margin-bottom:24px;color:#0D47A1;}';
+html += '.form-group{margin-bottom:20px;}';
+html += 'label{display:block;margin-bottom:8px;font-weight:bold;font-size:14px;color:#757575;}';
+html += 'input{width:100%;height:54px;padding:0 16px;border:1.5px solid #E0E0E0;border-radius:12px;font-size:16px;box-sizing:border-box;}';
+html += 'button{width:100%;height:56px;background-color:#0D47A1;color:#FFFFFF;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
+html += '.driver-card{background:#FFFFFF;border:1.5px solid #E0E0E0;border-radius:16px;padding:20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}';
+html += '.badge{display:inline-block;padding:4px 12px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-weight:bold;font-size:12px;}';
+html += '.btn-approve{background-color:#10B981;width:auto;padding:0 20px;height:44px;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}';
+html += '.no-data{text-align:center;color:#757575;font-style:italic;margin-top:20px;}';
+html += '.admin-section{background:#F8F9FA;padding:20px;border-radius:16px;border:1.5px solid #E0E0E0;margin-bottom:24px;}';
+html += '';
+html += 'Вхід до Diway Admin';
+html += 'Номер телефону';
+html += 'Код безпеки (2FA)';
+html += 'ПІДТВЕРДИТИ ВХІД';
+html += 'Панель Адміністратора Diway';
+html += '';
+html += ' ';
+html += ' 📊 ВСЬОГО УНІКАЛЬНИХ ПРИСТРОЇВ';
+html += ' 0';
+html += ' ';
+html += ' ';
+html += ' 📈 НОВИХ ПРИСТРОЇВ (ЗА СЬОГОДНІ)';
+html += ' 0';
+html += ' ';
+html += '';
+html += '🛠️ Ручне керування підписками ';
+html += 'Введіть номер телефону смартфона, щоб нарахувати йому тестовий БЕЗЛІМІТ до 2050 року';
+html += '';
+html += '';
+html += 'ВИДАТИ БЕЗЛІМІТ';
+html += '';
+html += '📋 Усі зареєстровані користувачі та керування доступом';
+html += 'Завантаження пасажирів...';
+html += 'Завантаження водіїв...';
+html += '';
+html += 'let adminToken = "";';
+html += 'async function loginAdmin() {';
+html += ' const phone = document.getElementById("adminPhone").value.trim();';
+html += ' const code = document.getElementById("adminCode").value.trim();';
+html += ' if(!phone || !code) { alert("Заповніть всі поля!"); return; }';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });';
+html += ' const data = await response.json();';
+html += ' if (data.ok) { adminToken = data.token; document.getElementById("authBlock").style.display = "none"; document.getElementById("dashboardBlock").style.display = "block"; loadUnverifiedDrivers(); }';
+html += ' else { alert("Відмовлено: " + data.error); }';
+html += ' } catch (err) { alert("Помилка мережі при вході"); }';
+html += '}';
+html += `async function loadUnverifiedDrivers() {
+try {
+const response = await fetch("/api/admin/unverified-drivers", { headers: { "Authorization": "Bearer " + adminToken } });
+const data = await response.json();
+if (data.stats) {
+document.getElementById("statTotalUsers").innerText = data.stats.totalDevices || 0;
+document.getElementById("statTodayUsers").innerText = data.stats.todayDevices || 0;
+}
+if (!data.ok) {
+document.getElementById("driversList").innerHTML = "Помилка сервера: " + data.error + "";
+return;
+}
+const listDiv = document.getElementById("driversList"); listDiv.innerHTML = "";
+if (data.drivers && data.drivers.length > 0) {
+data.drivers.forEach(driver => {
+const card = document.createElement("div"); card.className = "driver-card";
+let isDriverActive = driver.isVerified === true || driver.isVerified === 'true' || driver.isVerified === 1;
+let statusBadge = isDriverActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
+let actionButton = isDriverActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
+card.innerHTML = "" + driver.name + " " + statusBadge + "Тел: " + driver.phone + "" + (driver.carMake || "Авто") + " (" + (driver.plateNumber || "Б/Н") + ")" + actionButton + "";
+listDiv.appendChild(card);
 });
-
-// 🚀 Адмін логін на сторінці — ІСПРАВЛЕНО ЧИТАННЯ ФЛАГА is_admin
-// 🚀 Адмін логін на сторінці — ТОЧЕЧНОЕ ИСПРАВЛЕННОЕ ИЗВЛЕЧЕНИЕ ОБЪЕКТА ИЗ МАССИВА ROWS
+} else { listDiv.innerHTML = "Водіїв не знайдено."; }
+const passDiv = document.getElementById("passengersList"); passDiv.innerHTML = "";
+if (data.passengers && data.passengers.length > 0) {
+data.passengers.forEach(pass => {
+const card = document.createElement("div"); card.className = "driver-card";
+let isPassengerActive = pass.isVerified === true || pass.isVerified === 'true' || pass.isVerified === 1;
+let statusBadge = isPassengerActive ? "Активний" : "ЗАБЛОКОВАНИЙ";
+let actionButton = isPassengerActive ? "ЗАБЛОКУВАТИ" : "РОЗБЛОКУВАТИ";
+card.innerHTML = "" + pass.name + " " + statusBadge + "Тел: " + pass.phone + "" + actionButton + "";
+passDiv.appendChild(card);
+});
+} else { passDiv.innerHTML = "Пасажирів не знайдено."; }
+} catch (err) { alert("Помилка завантаження адмінки"); }
+};`;
+html += 'async function toggleDriverBlock(driverId, setActivate) {';
+html += ' let confirmAction = confirm(setActivate ? "Розблокувати?" : "🚨 ЗАБЛОКУВАТИ?");';
+html += ' if (!confirmAction) return;';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/verify-driver", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ driverId, activeStatus: setActivate }) });';
+html += ' const data = await response.json();';
+html += ' if (data.ok) { loadUnverifiedDrivers(); } else { alert(data.error); }';
+html += ' } catch (err) { alert("Помилка сервера"); }';
+html += '}';
+html += 'async function grantManualSubscription() {';
+html += ' const phone = document.getElementById("targetUserPhone").value.trim();';
+html += ' if(!phone) return;';
+html += ' try {';
+html += ' const response = await fetch("/api/admin/manual-subscription", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken }, body: JSON.stringify({ phone }) });';
+html += ' const data = await response.json();';
+html += ' if(data.ok) { alert("🟢 Безліміт активовано!"); document.getElementById("targetUserPhone").value = ""; }';
+html += ' } catch(err) { alert("Помилка з'єднання"); }';
+html += '}';
+html += '';
+res.send(html);
+});
 app.post('/api/admin/login', async (req, res) => {
-  try {
-    const { phone, code } = req.body;
-    if (!phone || !code) return res.json({ ok: false, error: 'Заповніть всі поля!' });
-    if (code !== '777999') return res.json({ ok: false, error: 'Невірний 2FA код!' });
-    
-    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
-    if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
-    
-    // 🔥 ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ: Берем именно нулевой элемент массива rows!
-    const user = result.rows[0];
-    
-    // 🔥 ТЕПЕРЬ СВОЙСТВО ЧИТАЕТСЯ ИДЕАЛЬНО
-    if (!user.is_admin) {
-      return res.json({ ok: false, error: 'У вас немає прав адміністратора!' });
-    }
-
-    const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
-    res.json({ ok: true, token });
-  } catch (err) { 
-    console.error('Admin login error:', err.message);
-    res.json({ ok: false, error: err.message }); 
-  }
+try {
+const { phone, code } = req.body;
+if (code !== '777999') return res.json({ ok: false, error: 'Невірний код!' });
+const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone.trim()]);
+if (result.rows.length === 0) return res.json({ ok: false, error: 'Користувача не знайдено' });
+const user = result.rows[0];
+if (!user.is_admin) return res.json({ ok: false, error: 'Немає прав!' });
+const token = jwt.sign({ id: user.id, role: 'admin', isAdmin: true }, JWT_SECRET, { expiresIn: '2h' });
+res.json({ ok: true, token });
+} catch (err) { res.json({ ok: false, error: err.message }); }
 });
-// 🚀 АДМІН: Отримання списків, розрахунок 30-денного триалу та точний підрахунок унікальних пристроїв
 app.get('/api/admin/unverified-drivers', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const token = authHeader.replace(/^Bearer\s+/, '').trim();
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
-    
-    const totalQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials');
-    const totalDevices = totalQuery.rows[0].count;
-
-    const todayQuery = await pool.query('SELECT COUNT(*)::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
-    const todayDevices = todayQuery.rows[0].count;
-    
-    // 🔥 ІСПРАВЛЕНО: Додано SELECT дат для розрахунку триалу в адмінці
-    const driversResult = await pool.query(`
-      SELECT u.id, u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber", u.is_verified AS "isVerified",
-             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
-      FROM users u
-      LEFT JOIN device_trials d ON u.device_id = d.device_id
-      WHERE u.role = 'Водій' 
-      ORDER BY u.is_verified ASC, u.id DESC
-    `);
-
-    const passengersResult = await pool.query(`
-      SELECT u.id, u.name, u.phone, u.is_verified AS "isVerified",
-             u.subscription_expires_at AS "subExpires", d.first_registered_at AS "deviceReg"
-      FROM users u
-      LEFT JOIN device_trials d ON u.device_id = d.device_id
-      WHERE u.role = 'Пасажир' 
-      ORDER BY u.is_verified ASC, u.id DESC
-    `);
-
-    // 🔥 ДОБАВЛЕНО: Функція розрахунку оновленого 30-денного безкоштовного періоду для веб-карток
-    const now = new Date();
-    const formatUser = (row) => {
-      const deviceRegisteredAt = row.deviceReg ? new Date(row.deviceReg) : now;
-      const subscriptionExpiresAt = row.subExpires ? new Date(row.subExpires) : null;
-      let daysLeft = 0;
-      let payBlocked = false;
-      
-      // Системний розрахунок 30 днів безкоштовного доступу
-      const trialPeriodMs = 30 * 24 * 60 * 60 * 1000;
-      const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
-      
-      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
-        daysLeft = Math.ceil((subscriptionExpiresAt - now) / (1000 * 60 * 60 * 24));
-        payBlocked = false;
-      } else if (now < trialExpiryDate) {
-        daysLeft = Math.ceil((trialExpiryDate - now) / (1000 * 60 * 60 * 24));
-        payBlocked = false;
-      } else {
-        daysLeft = 0;
-        payBlocked = true;
-      }
-      return { 
-        id: row.id, name: row.name, phone: row.phone, carMake: row.carMake, plateNumber: row.plateNumber, 
-        isVerified: row.isVerified, daysLeft, payBlocked 
-      };
-    };
-
-    // Віддаємо відформатовані об'єкти з днями триалу
-    res.json({ 
-      ok: true, 
-      stats: {
-        totalDevices: totalDevices,
-        todayDevices: todayDevices
-      },
-      drivers: driversResult.rows.map(formatUser),
-      passengers: passengersResult.rows.map(formatUser)
-    });
-  } catch (err) { 
-    console.error('Admin drivers fetch error:', err.message);
-    res.json({ ok: false, error: 'Помилка безпеки токена або сервера СУБД: ' + err.message }); 
-  }
+try {
+const authHeader = req.headers['authorization'];
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+if (!decoded.isAdmin) return res.json({ ok: false, error: 'Ви не адмін.' });
+const totalQuery = await pool.query('SELECT COUNT()::int AS count FROM device_trials');
+const totalDevices = totalQuery.rows[0].count;
+const todayQuery = await pool.query('SELECT COUNT()::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
+const todayDevices = todayQuery.rows[0].count;
+const driversResult = await pool.query(SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified" FROM users WHERE role = 'Водій' ORDER BY is_verified ASC, id DESC);
+const passengersResult = await pool.query(SELECT id, name, phone, is_verified AS "isVerified" FROM users WHERE role = 'Пасажир' ORDER BY is_verified ASC, id DESC);
+res.json({ ok: true, stats: { totalDevices, todayDevices }, drivers: driversResult.rows, passengers: passengersResult.rows });
+} catch (err) { res.json({ ok: false, error: err.message }); }
 });
-
-
-
-// 🚀 АДМІН: Переключення статусу блокування водія/пасажира (True / False) — ФІКС СИНТАКСИСУ СУБД
 app.post('/api/admin/verify-driver', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const parts = authHeader.split(' ');
-    const token = parts.length > 1 ? parts[1] : parts[0];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded.isAdmin) return res.json({ ok: false, error: 'Заборонено' });
-
-    const { driverId, activeStatus } = req.body;
-    
-    // 🔥 ИСПРАВЛЕНО: Явно приводим activeStatus к булевому типу JavaScript (true/false) перед отправкой в Supabase
-    const finalStatus = activeStatus === true || activeStatus === 'true';
-    
-    // 🔥 ИСПРАВЛЕНО: Запрос строго обновляет колонку is_verified, принудительно передавая булев флаг
-    await pool.query(
-      'UPDATE users SET is_verified = $1 WHERE id = $2', 
-      [finalStatus, parseInt(driverId)]
-    );
-    
-    res.json({ ok: true });
-  } catch (err) { 
-    console.error('Verify driver error:', err.message);
-    res.json({ ok: false, error: err.message }); 
-  }
+try {
+const authHeader = req.headers['authorization'];
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+if (!decoded.isAdmin) return res.json({ ok: false, error: 'Заборонено' });
+const { driverId, activeStatus } = req.body;
+const finalStatus = activeStatus === true || activeStatus === 'true';
+await pool.query('UPDATE users SET is_verified = $1 WHERE id = $2', [finalStatus, parseInt(driverId)]);
+res.json({ ok: true });
+} catch (err) { res.json({ ok: false, error: err.message }); }
 });
-
-
-// 🚀 АДМІН: Ручне нарахування безлімітного доступу тестовим смартфонам по номеру телефону
 app.post('/api/admin/manual-subscription', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
-    
-    const parts = authHeader.split(' ');
-    const token = parts[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Перевіряємо права адміністратора
-    if (!decoded.isAdmin) {
-      return res.json({ ok: false, error: 'У вас немає прав доступу!' });
-    }
-
-    const { phone } = req.body;
-    if (!phone) return res.json({ ok: false, error: 'Введіть номер телефону користувача!' });
-
-    // Проверяем, существует ли пользователь с таким номером
-    const checkUser = await pool.query('SELECT id FROM users WHERE phone = \$1', [phone.trim()]);
-    if (checkUser.rows.length === 0) {
-      return res.json({ ok: false, error: 'Користувача з таким номером телефону не знайдено!' });
-    }
-
-    // 🔥 НАЧИСЛЯЕМ БЕЗЛИМИТ: Принудительно сдвигаем подписку до 2050 года для тестов
-    await pool.query(
-      `UPDATE users 
-       SET subscription_expires_at = '2050-01-01 00:00:00+00' 
-       WHERE phone = $1`,
-      [phone.trim()]
-    );
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Admin manual subscription error:', err.message);
-    res.json({ ok: false, error: 'Помилка сервера: ' + err.message });
-  }
+try {
+const authHeader = req.headers['authorization'];
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+if (!decoded.isAdmin) return res.json({ ok: false, error: 'У вас немає прав!' });
+const { phone } = req.body;
+const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone.trim()]);
+if (checkUser.rows.length === 0) return res.json({ ok: false, error: 'Не знайдено!' });
+await pool.query(UPDATE users SET subscription_expires_at = '2050-01-01 00:00:00+00' WHERE phone = $1, [phone.trim()]);
+res.json({ ok: true });
+} catch (err) { res.json({ ok: false, error: err.message }); }
 });
-
-
 // ==========================================
-// 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK (MONO PAY)
+// 💳 БЛОК ИМИТАЦИИ ОПЛАТЫ MONOBANK
 // ==========================================
-
 app.post('/api/payment/create-invoice', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
-    
-    const parts = authHeader.split(' ');
-    // 🔥 ИСПРАВЛЕНО: Безопасное извлечение токена независимо от формата (Bearer или чистый)
-    const token = parts.length > 1 ? parts[1] : parts[0];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    const testPaymentUrl = `https://diway.onrender.com/payment/simulator?userId=${decoded.id}`;
-    res.json({ ok: true, paymentUrl: testPaymentUrl });
-  } catch (err) {
-    console.error('Invoice creation error:', err.message);
-    res.json({ ok: false, error: 'Помилка платежу: ' + err.message });
-  }
+try {
+const authHeader = req.headers['authorization'];
+const token = authHeader.replace(/^Bearer\s+/, '').trim();
+const decoded = jwt.verify(token, JWT_SECRET);
+const testPaymentUrl = https://onrender.com{decoded.id};
+res.json({ ok: true, paymentUrl: testPaymentUrl });
+} catch (err) { res.json({ ok: false, error: err.message }); }
 });
-
-
-// 🚀 2. Веб-страница симулятора оплаты Monobank (Mono Pay)
 app.get('/payment/simulator', (req, res) => {
-  const userId = req.query.userId;
-  let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
-  html += '<title>Monobank | Тестова Оплата</title><style>';
-  html += 'body{font-family:sans-serif;background-color:#FFF;margin:0;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh;}';
-  html += '.card{max-width:400px;width:100%;border:2px solid #E0E0E0;padding:30px;border-radius:20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.05);}';
-  html += 'h2{color:#FF1744;margin-bottom:10px;}';
-  html += '.price{font-size:32px;font-weight:bold;margin:20px 0;color:#212121;}';
-  html += 'button{width:100%;height:54px;background-color:#212121;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;}';
-  html += '</style></head><body>';
-  html += '<div class="card"><h2>monobank | fono pay</h2><p>Тестова оплата підписки Diway</p>';
-  html += '<div class="price">150.00 ₴</div>';
-  html += '<form action="/api/payment/webhook-simulation" method="POST">';
-  html += '<input type="hidden" name="userId" value="' + userId + '">';
-  html += '<button type="submit">УСПІШНО СПЛАТИТИ 150 ГРН</button></form></div>';
-  html += '</body></html>';
-  res.send(html);
+const userId = req.query.userId;
+let html = 'Monobank | Тестова Оплата';
+html += '';
+html += 'monobankТестова оплата підписки Diway150.00 ₴';
+html += 'УСПІШНО СПЛАТИТИ';
+html += '';
+res.send(html);
 });
-
-// 🚀 3. Симуляция Вебхука Monobank: Принимает успешную оплату и сдвигает подписку на 30 дней в Supabase
-// 🚀 ОБНОВЛЕННЫЙ ВЕБХУК: Автоматически продлевает подписку И разблокирует пользователя!
 app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const { userId } = req.body;
-    if (!userId) return res.send('Помилка: Не вказано ID користувача');
-
-    // 🔥 ИСПРАВЛЕНО: Одновременно сдвигаем подписку на 30 дней И включаем is_verified = true, чтобы снять блок!
-    await pool.query(
-      `UPDATE users 
-       SET subscription_expires_at = NOW() + INTERVAL '30 days',
-           is_verified = true 
-       WHERE id = $1`,
-      [parseInt(userId)]
-    );
-
-       // 🟢 ТЕКСТ ОБНОВЛЕН: Уведомление об успешной активации 30 дней подписки
-    res.send('<!DOCTYPE html><html lang="uk"><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1 style="color:#10B981;">🟢 Оплата успішна!</h1><p>Підписку Diway активовано на 30 днів, аккаунт верифіковано. Період користування успішно подовжено. Можете повернутися в додаток.</p></body></html>');
-
-  } catch (err) {
-    res.send('Помилка обробки платежу: ' + err.message);
-  }
+try {
+const { userId } = req.body;
+if (!userId) return res.send('Помилка: Не вказано ID');
+await pool.query(UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days', is_verified = true WHERE id = $1, [parseInt(userId)]);
+res.send('🟢 Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
+} catch (err) { res.send('Помилка: ' + err.message); }
 });
-
-// ==========================================
-// 🧹 СИСТЕМНАЯ ОЧИСТКА БАЗЫ ДАННЫХ (КАЖДЫЕ 5 ЧАСОВ)
-// ==========================================
-// 🧹 СИСТЕМНАЯ АВТООЧИСТКА: Удаляем архивные рейсы из базы каждые 5 часов
+// 🧹 Фоновая очистка старых рейсов (5 часов)
 setInterval(async () => {
-  try {
-    const deleteResult = await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
-    if (deleteResult.rowCount > 0) {
-      console.log(`🧹 База очищена: Стерто ${deleteResult.rowCount} старых рейсов.`);
-    }
-  } catch (err) {
-    console.error('Ошибка очистки active_trips:', err.message);
-  }
-}, 1000 * 60 * 60); // Проверка раз в час
-
-
-
-// ==========================================
-// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
-// ==========================================
+try {
+await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
+} catch (err) { console.error(err.message); }
+}, 1000 * 60 * 60);
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running smoothly on port ${PORT}`);
+console.log(🚀 Server is running smoothly on port ${PORT});
 });
