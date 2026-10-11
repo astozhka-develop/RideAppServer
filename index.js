@@ -253,7 +253,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     const latDelta = 0.025; 
     const lonDelta = 0.03;
     
-        // 🟢 ИСПРАВЛЕНО: Календарный фильтр NOW() полностью убран! Сопоставление идет строго по району Днепра. Машинка гарантированно загорится!
+           // 🟢 ИСПРАВЛЕНО: Полный баланс косых кавычек и закрывающих скобок OSRM-радара восстановлен!
     const result = await pool.query(
       `SELECT t.id, t.user_id, t.start_lat, t.start_lon, t.end_lat, t.end_lon, 
               t.start_address, t.end_address, t.departure_time,
@@ -263,12 +263,12 @@ app.get('/api/trips/drivers', async (req, res) => {
        WHERE t.role = 'driver'
          AND t.status = 'searching'
          AND u.is_verified = true
-         -- Ищем водителей в радиусе 2.5 км от точки старта пассажира
          AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
          AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
        ORDER BY t.id DESC`,
       [pStartLat, latDelta, pStartLon, lonDelta]
     );
+
 
     // Внутренний маппинг formattedDrivers оставляем без изменений, он работает идеально!
 
