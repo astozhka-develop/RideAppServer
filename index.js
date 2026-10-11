@@ -240,22 +240,52 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
+// 🟢 ИСПРАВЛЕННЫЙ ВСЕЯДНЫЙ РОУТ: На базе вашей рабочей версии от 07.10, без конфликтов с низом файла!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const sLat = req.query.startLat || req.query.start_lat;
-    const sLon = req.query.startLon || req.query.start_lon;
+    // Читаем координаты в любом регистре, который может прислать Retrofit
+    const sLat = req.query.startLat || req.query.start_lat || req.query.sLat;
+    const sLon = req.query.startLon || req.query.start_lon || req.query.sLon;
+
     if (!sLat || !sLon) {
         return res.json({ ok: false, error: 'Пропущені координати пасажира' });
     }
+
     const pStartLat = parseFloat(sLat);
     const pStartLon = parseFloat(sLon);
     
-    const latDelta = 0.025; 
+    // Радиус фильтрации попутчиков (~2.5 км вокруг пассажира в Днепре)
+    const latDelta = 0.025;
     const lonDelta = 0.03;
-    
-           // 🟢 ИСПРАВЛЕНО: Полный баланс косых кавычек и закрывающих скобок OSRM-радара восстановлен!
-        // 🟢 ПУЛЕНЕПРОБИВАЕМЫЙ ВАРИАНТ: Обычные кавычки в одну строку полностью изолируют этот блок от низа файла!
-    const result = await pool.query('SELECT t.id, t.user_id, t.start_lat, t.start_lon, t.end_lat, t.end_lon, t.start_address, t.end_address, t.departure_time, u.name, u.phone, u.car_make, u.plate_number FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = \'driver\' AND t.status = \'searching\' AND u.is_verified = true AND t.start_lat BETWEEN $1 - $2 AND $1 + $2 AND t.start_lon BETWEEN $3 - $4 AND $3 + $4 ORDER BY t.id DESC', [pStartLat, latDelta, pStartLon, lonDelta]);
+
+    // 🔥 ВОЗВРАЩЕНО ИСПРАВЛЕННОЕ: Ваши родные алиасы AS "startLat" в кавычках для Котлина!
+    // Фильтр по времени убран, чтобы часовые пояса сервера и Украины (+3 часа) больше не ослепляли радар!
+    const result = await pool.query(
+      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", 
+              t.start_lat AS "startLat", t.start_lon AS "startLon", 
+              t.end_lat AS "endLat", t.end_lon AS "endLon", 
+              t.start_address AS "startAddress", t.end_address AS "endAddress",
+              t.departure_time AS "departureTime",
+              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
+       FROM active_trips t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.role = 'driver' 
+         AND t.status = 'searching' 
+         AND u.is_verified = true
+         -- Географический фильтр района Днепра (защита от телепортации маркеров в Лиму)
+         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
+         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
+       ORDER BY t.id DESC`,
+      [pStartLat, latDelta, pStartLon, lonDelta]
+    );
+
+    res.json({ ok: true, drivers: result.rows });
+
+  } catch (err) {
+    console.error('Get drivers error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
+  }
+});
 
 
     // Внутренний маппинг formattedDrivers оставляем без изменений, он работает идеально!
