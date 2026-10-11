@@ -273,22 +273,23 @@ app.post('/api/trips', async (req, res) => {
 });
 
 
-// 🚀 ОПТИМИЗИРОВАНО ПОД РАЙДШЕРИНГ: Выдача живых координат в camelCase с фильтром 25 минут!
+// 🚀 УМНЫЙ РАДАР РАЙДШЕРИНГА: Выдача координат в camelCase с полем departureTime и фильтром 25 минут!
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    const { startLat, startLon, endLat, endLon } = req.query;
-    if (!startLat || !startLon || !endLat || !endLon) {
-        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
-    }
-    const pStartLat = parseFloat(startLat);
-    const pStartLon = parseFloat(startLon);
+    const sLat = req.query.startLat || req.query.start_lat;
+    const sLon = req.query.startLon || req.query.start_lon;
     
-    // Математический допуск (~2.5 км вокруг точки старта пассажира)
+    if (!sLat || !sLon) {
+        return res.json({ ok: false, error: 'Пропущені стартові координати пасажира' });
+    }
+    
+    const pStartLat = parseFloat(sLat);
+    const pStartLon = parseFloat(sLon);
+    
+    // Географический допуск (~2.5 км вокруг пассажира в Днепре)
     const latDelta = 0.025; 
     const lonDelta = 0.03;
     
-    // 🔥 ФИКС: Явно переименовываем t.start_lat AS "startLat" и t.start_lon AS "startLon" 
-    // Также накладываем фильтр t.created_at >= NOW() - INTERVAL '25 minutes' (Рейс активен ровно 25 минут!)
     const result = await pool.query(
       `SELECT t.id AS "tripId", 
               t.user_id::int AS "driverId", 
@@ -311,7 +312,7 @@ app.get('/api/trips/drivers', async (req, res) => {
          -- Ищем водителей из попутного района пассажира
          AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
          AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-         -- Поездка водителя отображается на карте строго 25 минут
+         -- Поездка водителя отображается на карте ровно 25 минут с момента старта
          AND t.created_at >= NOW() - INTERVAL '25 minutes'
        ORDER BY t.id DESC`,
       [pStartLat, latDelta, pStartLon, lonDelta]
