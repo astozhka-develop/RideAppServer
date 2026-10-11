@@ -260,24 +260,9 @@ app.get('/api/trips/drivers', async (req, res) => {
 
     // 🔥 ВОЗВРАЩЕНО ИСПРАВЛЕННОЕ: Ваши родные алиасы AS "startLat" в кавычках для Котлина!
     // Фильтр по времени убран, чтобы часовые пояса сервера и Украины (+3 часа) больше не ослепляли радар!
-    const result = await pool.query(
-      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", 
-              t.start_lat AS "startLat", t.start_lon AS "startLon", 
-              t.end_lat AS "endLat", t.end_lon AS "endLon", 
-              t.start_address AS "startAddress", t.end_address AS "endAddress",
-              t.departure_time AS "departureTime",
-              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
-       FROM active_trips t
-       JOIN users u ON t.user_id = u.id
-       WHERE t.role = 'driver' 
-         AND t.status = 'searching' 
-         AND u.is_verified = true
-         -- Географический фильтр района Днепра (защита от телепортации маркеров в Лиму)
-         AND t.start_lat BETWEEN $1 - $2 AND $1 + $2
-         AND t.start_lon BETWEEN $3 - $4 AND $3 + $4
-       ORDER BY t.id DESC`,
-      [pStartLat, latDelta, pStartLon, lonDelta]
-    );
+        // 🟢 ИСПРАВЛЕНО: Полный возврат к вашей рабочей MVP-версии! Географический фильтр BETWEEN стерт. Радар выдает всех активных водителей, иконка гарантированно загорится!
+    const result = await pool.query('SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", t.departure_time AS "departureTime", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = \'driver\' AND t.status = \'searching\' AND u.is_verified = true ORDER BY t.id DESC');
+
 
     res.json({ ok: true, drivers: result.rows });
 
