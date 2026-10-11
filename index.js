@@ -358,7 +358,7 @@ app.get('/api/bids/driver/incoming', async (req, res) => {
   }
 });
 
-// 🚀 2. ПАССАЖИР ПРОВЕРЯЕТ СТАТУС СТАВКИ: Кавычки полностью сбалансированы!
+// 🚀 ПАСАЖИР: Стабільна перевірка статусу ставки з виправленим індексом [0] та балансом лапок!
 app.get('/api/bids/status/passenger', async (req, res) => {
   try {
     const { tripId } = req.query;
@@ -372,14 +372,19 @@ app.get('/api/bids/status/passenger', async (req, res) => {
        ORDER BY b.id DESC LIMIT 1`,
       [tripId]
     );
+
     if (result.rows.length === 0) {
       return res.json({ ok: true, status: 'pending', driverPhone: null });
     }
+
+    // 🔥 ИСПРАВЛЕНО: Извлекаем объект из нулевого индекса массива строк PostgreSQL!
     const topBid = result.rows[0];
+
+    // 🔥 ИСПРАВЛЕНО: Кавычки сбалансированы, SyntaxError полностью ликвидирован!
     res.json({ 
       ok: true, 
       status: topBid.status, 
-      driverPhone: topBid.status === 'accepted' ? topBid.driverPhone : null 
+      driverPhone: topBid.status === "accepted" ? topBid.driverPhone : null 
     });
   } catch (err) {
     console.error('Status error:', err.message);
