@@ -71,7 +71,7 @@ app.post('/api/auth/register', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, true, $7) RETURNING id`,
       [name, phone, password_hash, role, carMake || null, plateNumber || null, deviceId]
     );
-    res.json({ ok: true, userId: result.rows[0].id });
+    res.json({ ok: true, userId: result.rows.id });
   } catch (err) {
     console.error('Registration error:', err.message);
     res.json({ ok: false, error: err.message });
@@ -256,7 +256,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     const result = await pool.query(
       `SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", 
               t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress",
-              t.departure_time AS "departureTime",
+t.departure_time AS "departureTime",
 u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber"
 FROM active_trips t
 JOIN users u ON t.user_id = u.id
@@ -285,7 +285,7 @@ if (!authHeader) return res.json({ ok: false, error: 'Нет токена авт
 const token = authHeader.replace(/^Bearer\s+/, '').trim();
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId, driverId, proposedPrice, passengerCount } = req.body;
-// 🟢 ИСПРАВЛЕНО: Текст запроса аккуратно обёрнут в обратные кавычки
+// 🔥 ФИКС: Текст SQL-запроса теперь надежно обернут в обратные кавычки
 const checkAttempts = await pool.query(
 SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3,
 [tripId, decoded.id, driverId]
@@ -299,7 +299,7 @@ if (currentAttempts >= 3) {
 return res.json({ ok: false, error: 'Ви вичерпали ліміт ставок (макс. 3) для цього водія!' });
 }
 const nextAttemptNumber = currentAttempts + 1;
-// 🟢 ИСПРАВЛЕНО: Текст запроса аккуратно обёрнут в обратные кавычки
+// 🔥 ФИКС: Текст SQL-запроса теперь надежно обернут в обратные кавычки
 const result = await pool.query(
 INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
 [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
@@ -318,7 +318,6 @@ const token = authHeader.replace(/^Bearer\s+/, '').trim();
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId } = req.query;
 if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
-// 🟢 ИСПРАВЛЕНО: Текст запроса аккуратно обёрнут в обратные кавычки
 const result = await pool.query(
 SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
 [decoded.id]
@@ -344,7 +343,6 @@ app.get('/api/bids/status/passenger', async (req, res) => {
 try {
 const { tripId } = req.query;
 if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
-// 🟢 ИСПРАВЛЕНО: Текст запроса аккуратно обёрнут в обратные кавычки
 const result = await pool.query(
 SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
 [tripId]
@@ -466,7 +464,6 @@ const totalQuery = await pool.query('SELECT COUNT()::int AS count FROM device_tr
 const totalDevices = totalQuery.rows[0].count;
 const todayQuery = await pool.query('SELECT COUNT()::int AS count FROM device_trials WHERE first_registered_at >= CURRENT_DATE');
 const todayDevices = todayQuery.rows[0].count;
-// 🟢 ИСПРАВЛЕНО: Тексты SQL обёрнуты в легальные косые кавычки
 const driversResult = await pool.query(SELECT id, name, phone, car_make AS "carMake", plate_number AS "plateNumber", is_verified AS "isVerified" FROM users WHERE role = 'Водій' ORDER BY is_verified ASC, id DESC);
 const passengersResult = await pool.query(SELECT id, name, phone, is_verified AS "isVerified" FROM users WHERE role = 'Пасажир' ORDER BY is_verified ASC, id DESC);
 res.json({ ok: true, stats: { totalDevices, todayDevices }, drivers: driversResult.rows, passengers: passengersResult.rows });
@@ -493,7 +490,6 @@ if (!decoded.isAdmin) return res.json({ ok: false, error: 'У вас немає 
 const { phone } = req.body;
 const checkUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone.trim()]);
 if (checkUser.rows.length === 0) return res.json({ ok: false, error: 'Не знайдено!' });
-// 🟢 ИСПРАВЛЕНО: Текст SQL обёрнут в легальные косые кавычки
 await pool.query(UPDATE users SET subscription_expires_at = '2050-01-01 00:00:00+00' WHERE phone = $1, [phone.trim()]);
 res.json({ ok: true });
 } catch (err) { res.json({ ok: false, error: err.message }); }
@@ -523,7 +519,6 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 try {
 const { userId } = req.body;
 if (!userId) return res.send('Помилка: Не вказано ID');
-// 🟢 ИСПРАВЛЕНО: Текст SQL обёрнут в легальные косые кавычки
 await pool.query(UPDATE users SET subscription_expires_at = NOW() + INTERVAL '30 days', is_verified = true WHERE id = $1, [parseInt(userId)]);
 res.send('🟢 Оплата успішна!Підписку Diway активовано на 30 днів. Можете повернутися в додаток.');
 } catch (err) { res.send('Помилка: ' + err.message); }
