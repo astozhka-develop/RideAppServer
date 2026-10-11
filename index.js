@@ -286,10 +286,12 @@ const token = authHeader.replace(/^Bearer\s+/, '').trim();
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId, driverId, proposedPrice, passengerCount } = req.body;
 // 🔥 ФИКС: Текст SQL-запроса теперь надежно обернут в обратные кавычки
-const checkAttempts = await pool.query(
-SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3,
-[tripId, decoded.id, driverId]
-);
+    const checkAttempts = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM ride_bids WHERE trip_id = $1 AND passenger_id = $2 AND driver_id = $3`,
+      [tripId, decoded.id, driverId]
+    );
+
+
 const currentAttempts = checkAttempts.rows[0].count;
 const checkDriverStatus = await pool.query('SELECT is_verified FROM users WHERE id = $1', [driverId]);
 if (checkDriverStatus.rows.length === 0 || !checkDriverStatus.rows[0].is_verified) {
@@ -300,10 +302,13 @@ return res.json({ ok: false, error: 'Ви вичерпали ліміт став
 }
 const nextAttemptNumber = currentAttempts + 1;
 // 🔥 ФИКС: Текст SQL-запроса теперь надежно обернут в обратные кавычки
-const result = await pool.query(
-INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id,
-[tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
-);
+    const result = await pool.query(
+      `INSERT INTO ride_bids (trip_id, passenger_id, driver_id, proposed_price, passenger_count, attempt_number, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
+      [tripId, decoded.id, driverId, proposedPrice, passengerCount, nextAttemptNumber]
+    );
+
+
 res.json({ ok: true, bidId: result.rows[0].id, attempt: nextAttemptNumber });
 } catch (err) {
 console.error('Bid creation error:', err.message);
@@ -318,10 +323,13 @@ const token = authHeader.replace(/^Bearer\s+/, '').trim();
 const decoded = jwt.verify(token, JWT_SECRET);
 const { tripId } = req.query;
 if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId водія' });
-const result = await pool.query(
-SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id WHERE b.driver_id = $1 AND b.status = 'pending',
-[decoded.id]
-);
+    const result = await pool.query(
+      `SELECT b.id AS "bidId", b.trip_id AS "passengerTripId", b.proposed_price AS "proposedPrice", b.passenger_count AS "passengerCount", u.name AS "passengerName", t.start_address AS "startAddress" 
+       FROM ride_bids b JOIN users u ON b.passenger_id = u.id JOIN active_trips t ON b.trip_id = t.id 
+       WHERE b.driver_id = $1 AND b.status = 'pending'`,
+      [decoded.id]
+    );
+
 res.json({ ok: true, bids: result.rows });
 } catch (err) {
 console.error('Incoming bids error:', err.message);
@@ -343,10 +351,11 @@ app.get('/api/bids/status/passenger', async (req, res) => {
 try {
 const { tripId } = req.query;
 if (!tripId) return res.json({ ok: false, error: 'Пропущений tripId' });
-const result = await pool.query(
-SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1,
-[tripId]
-);
+    const result = await pool.query(
+      `SELECT b.status, u.phone AS "driverPhone" FROM ride_bids b JOIN users u ON b.driver_id = u.id WHERE b.trip_id = $1 ORDER BY b.id DESC LIMIT 1`,
+      [tripId]
+    );
+
 if (result.rows.length === 0) {
 return res.json({ ok: true, status: 'pending', driverPhone: null });
 }
