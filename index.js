@@ -198,10 +198,12 @@ app.put('/api/profile', async (req, res) => {
 // 🗺️ БЛОК ПОЕЗДОК (АКТИВНЫЕ МАРШРУТЫ)
 // ==========================================
 
+// 🚀 ОПТИМІЗОВАНО ДЛЯ ТЕСТІВ: Перед створенням нового маршруту сервер повністю стирає старі рейси та ставки користувача!
 app.post('/api/trips', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.json({ ok: false, error: 'Нет токена авторизации' });
+    
     const token = authHeader.replace(/^Bearer\s+/, '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
     
@@ -215,20 +217,18 @@ app.post('/api/trips', async (req, res) => {
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
     const finalDepartureTime = departureTime || new Date().toISOString();
+
+    // 🔥 КРИТИЧЕСКИЙ ФИКС: Перед записью нового рейса полностью зачищаем старые хвосты в Supabase!
+    // Сначала удаляем все зависшие торги (ставки), привязанные к прошлым поездкам этого водителя/пассажира
+    await pool.query('DELETE FROM ride_bids WHERE passenger_id = \$1 OR driver_id = \$1', [decoded.id]);
     
+    // Затем полностью удаляем старый рейс из активной таблицы радара, чтобы очистить кэш на картах попутчиков
+    await pool.query('DELETE FROM active_trips WHERE user_id = \$1', [decoded.id]);
+
+    // Чистая запись нового актуального маршрута без риска раздвоения маркеров на карте пассажира!
     const result = await pool.query(
       `INSERT INTO active_trips (user_id, role, start_lat, start_lon, end_lat, end_lon, start_address, end_address, status, departure_time) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', $9) 
-       ON CONFLICT (user_id) 
-       DO UPDATE SET 
-          start_lat = EXCLUDED.start_lat, 
-          start_lon = EXCLUDED.start_lon,
-          end_lat = EXCLUDED.end_lat,
-          end_lon = EXCLUDED.end_lon,
-          start_address = EXCLUDED.start_address,
-          end_address = EXCLUDED.end_address,
-          departure_time = EXCLUDED.departure_time,
-          status = 'searching'
        RETURNING id`,
       [decoded.id, role, startLat, startLon, endLat, endLon, finalStartAddress, finalEndAddress, finalDepartureTime]
     );
@@ -239,6 +239,7 @@ app.post('/api/trips', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера при створенні маршруту: ' + err.message });
   }
 });
+
 
 // 🟢 ИСПРАВЛЕННЫЙ ВСЕЯДНЫЙ РОУТ: На базе вашей рабочей версии от 07.10, без конфликтов с низом файла!
 app.get('/api/trips/drivers', async (req, res) => {
