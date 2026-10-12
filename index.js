@@ -241,29 +241,48 @@ app.post('/api/trips', async (req, res) => {
 });
 
 
-// 🟢 ИСПРАВЛЕННЫЙ ВСЕЯДНЫЙ РОУТ: На базе вашей рабочей версии от 07.10, без конфликтов с низом файла!
+// 🟢 ИСПРАВЛЕНО: Умный попутный радар BlaBlaCar. Сверяет и СТАРТ, и ФИНИШ в радиусе ~2.5 км.
 app.get('/api/trips/drivers', async (req, res) => {
   try {
-    // Читаем координаты в любом регистре, который может прислать Retrofit
+    // Принимаем все 4 координаты от Android-приложения (Retrofit)
     const sLat = req.query.startLat || req.query.start_lat || req.query.sLat;
     const sLon = req.query.startLon || req.query.start_lon || req.query.sLon;
+    const eLat = req.query.endLat || req.query.end_lat || req.query.eLat;
+    const eLon = req.query.endLon || req.query.end_lon || req.query.eLon;
 
-    if (!sLat || !sLon) {
-        return res.json({ ok: false, error: 'Пропущені координати пасажира' });
+    if (!sLat || !sLon || !eLat || !eLon) {
+        return res.json({ ok: false, error: 'Пропущені координати маршруту пасажира' });
     }
 
     const pStartLat = parseFloat(sLat);
     const pStartLon = parseFloat(sLon);
-    
-    // Радиус фильтрации попутчиков (~2.5 км вокруг пассажира в Днепре)
-    const latDelta = 0.025;
-    const lonDelta = 0.03;
+    const pEndLat = parseFloat(eLat);
+    const pEndLon = parseFloat(eLon);
 
-    // 🔥 ВОЗВРАЩЕНО ИСПРАВЛЕННОЕ: Ваши родные алиасы AS "startLat" в кавычках для Котлина!
-    // Фильтр по времени убран, чтобы часовые пояса сервера и Украины (+3 часа) больше не ослепляли радар!
-        // 🟢 ИСПРАВЛЕНО: Полный возврат к вашей рабочей MVP-версии! Географический фильтр BETWEEN стерт. Радар выдает всех активных водителей, иконка гарантированно загорится!
-    const result = await pool.query('SELECT t.id AS "tripId", t.user_id::int AS "driverId", t.start_lat AS "startLat", t.start_lon AS "startLon", t.end_lat AS "endLat", t.end_lon AS "endLon", t.start_address AS "startAddress", t.end_address AS "endAddress", t.departure_time AS "departureTime", u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" FROM active_trips t JOIN users u ON t.user_id = u.id WHERE t.role = \'driver\' AND t.status = \'searching\' AND u.is_verified = true ORDER BY t.id DESC');
-
+    // 🔥 ПУЛЕНЕПРОБИВАЕМЫЙ SQL: Дельты зашиты числами (0.025 / 0.03). База строго проверит ОДНО НАПРАВЛЕНИЕ!
+    const result = await pool.query(
+      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", 
+              t.start_lat AS "startLat", t.start_lon AS "startLon", 
+              t.end_lat AS "endLat", t.end_lon AS "endLon", 
+              t.start_address AS "startAddress", t.end_address AS "endAddress", 
+              t.departure_time AS "departureTime", 
+              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" 
+       FROM active_trips t 
+       JOIN users u ON t.user_id = u.id 
+       WHERE t.role = 'driver' 
+         AND t.status = 'searching' 
+         AND u.is_verified = true 
+         -- 🚙 1. Проверка совпадения СТАРТА водія та пасажира (+/- ~2.5 км)
+         AND t.start_lat BETWEEN $1 - 0.025 AND $1 + 0.025
+         AND t.start_lon BETWEEN $2 - 0.03 AND $2 + 0.03
+         -- 🚙 2. Жесткая проверка совпадения КУДА ЕДЕМ (ФИНИШ водія та пасажира збігається)
+         AND t.end_lat BETWEEN $3 - 0.025 AND $3 + 0.025
+         AND t.end_lon BETWEEN $4 - 0.03 AND $4 + 0.03
+         -- ⏱️ 3. Цикл жизни рейса на карте — строго 25 минут с момента запуска
+         AND t.created_at >= NOW() - INTERVAL '25 minutes'
+       ORDER BY t.id DESC`,
+      [pStartLat, pStartLon, pEndLat, pEndLon]
+    );
 
     res.json({ ok: true, drivers: result.rows });
 
@@ -272,6 +291,7 @@ app.get('/api/trips/drivers', async (req, res) => {
     res.json({ ok: false, error: 'Помилка сервера пошуку водіїв: ' + err.message });
   }
 });
+
 
 
     // Внутренний маппинг formattedDrivers оставляем без изменений, он работает идеально!
