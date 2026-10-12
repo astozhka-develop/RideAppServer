@@ -259,30 +259,28 @@ app.get('/api/trips/drivers', async (req, res) => {
     const pEndLat = parseFloat(eLat);
     const pEndLon = parseFloat(eLon);
 
-    // 🔥 ПУЛЕНЕПРОБИВАЕМЫЙ SQL: Дельты зашиты числами (0.025 / 0.03). База строго проверит ОДНО НАПРАВЛЕНИЕ!
+        // 🟢 ИСПРАВЛЕНО: Фильтр времени переведен на TIMEZONE Europe/Kiev. Ловушка часовых поясов сервера и Украины полностью ликвидирована! Машинка на попутном направлении мгновенно оживет.
     const result = await pool.query(
-      `SELECT t.id AS "tripId", t.user_id::int AS "driverId", 
-              t.start_lat AS "startLat", t.start_lon AS "startLon", 
-              t.end_lat AS "endLat", t.end_lon AS "endLon", 
-              t.start_address AS "startAddress", t.end_address AS "endAddress", 
-              t.departure_time AS "departureTime", 
-              u.name, u.phone, u.car_make AS "carMake", u.plate_number AS "plateNumber" 
-       FROM active_trips t 
-       JOIN users u ON t.user_id = u.id 
-       WHERE t.role = 'driver' 
-         AND t.status = 'searching' 
-         AND u.is_verified = true 
+      `SELECT t.id, t.user_id, t.start_lat, t.start_lon, t.end_lat, t.end_lon, 
+              t.start_address, t.end_address, t.departure_time,
+              u.name, u.phone, u.car_make, u.plate_number
+       FROM active_trips t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.role = 'driver'
+         AND t.status = 'searching'
+         AND u.is_verified = true
          -- 🚙 1. Проверка совпадения СТАРТА водія та пасажира (+/- ~2.5 км)
          AND t.start_lat BETWEEN $1 - 0.025 AND $1 + 0.025
          AND t.start_lon BETWEEN $2 - 0.03 AND $2 + 0.03
          -- 🚙 2. Жесткая проверка совпадения КУДА ЕДЕМ (ФИНИШ водія та пасажира збігається)
          AND t.end_lat BETWEEN $3 - 0.025 AND $3 + 0.025
          AND t.end_lon BETWEEN $4 - 0.03 AND $4 + 0.03
-         -- ⏱️ 3. Цикл жизни рейса на карте — строго 25 минут с момента запуска
-         AND t.created_at >= NOW() - INTERVAL '25 minutes'
+         -- ⏱️ 3. Цикл жизни рейса на радаре — 25 минут с учетом украинского времени (UTC+3)
+         AND t.created_at >= TIMEZONE('Europe/Kiev', NOW()) - INTERVAL '25 minutes'
        ORDER BY t.id DESC`,
       [pStartLat, pStartLon, pEndLat, pEndLon]
     );
+
 
     res.json({ ok: true, drivers: result.rows });
 
