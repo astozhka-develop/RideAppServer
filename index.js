@@ -10,6 +10,8 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
+// 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Раздача папки public для сайта-лендинга
+app.use(express.static(path.join(__dirname, 'public')));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 const PORT = parseInt(process.env.PORT, 10) || 10000;
@@ -398,7 +400,7 @@ res.json({ ok: false, error: err.message });
 // ==========================================
 // 🖥️ БЛОК ВЕБ-ПАНЕЛИ АДМИНИСТРАТОРА (ВШИТ НАПРЯМУЮ)
 // ==========================================
-app.get('/admin', (req, res) => {
+app.get('/astaff', (req, res) => {
   let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
   html += '<title>Панель Admin Diway</title><style>';
   html += 'body{font-family:sans-serif;background-color:#F4F6F9;margin:0;padding:0;color:#212121;}';
