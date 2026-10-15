@@ -12,7 +12,8 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 10000;
+
 
 // Настройка пула подключений к Supabase (PostgreSQL)
 const pool = new Pool({
