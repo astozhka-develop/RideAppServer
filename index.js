@@ -773,11 +773,11 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
   }
 });
 
-// 🧹 АВТОМАТИЧНА ЗАЧИСТКА MVP (Фоновий процес)
+// 🧹 АВТОМАТИЧНА ЗАЧИСТКА MVP (Фоновий процес): Повне видалення старих рейсів з урахуванням українського часу!
 setInterval(async () => {
   try {
-    await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
-    console.log("🧹 [Diway CleanUp]: Старі архівні поїздки успішно видалені.");
+    await pool.query("DELETE FROM active_trips WHERE created_at < TIMEZONE('Europe/Kiev', NOW()) - INTERVAL '5 hours'");
+    console.log("🧹 [Diway CleanUp]: Старі поїздки успішно видалені.");
   } catch (err) { 
     console.error("❌ [Diway CleanUp Error]:", err.message); 
   }
@@ -786,6 +786,16 @@ setInterval(async () => {
 // 🚀 ИСПРАВЛЕНО: Резервный динамический перехват ошибки EADDRINUSE (Порт занят)
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server is running smoothly on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`⚠️ Порт ${PORT} зайнятий старим процесом Render. Перемикаємось на резервний порт...`);
+    setTimeout(() => {
+      // Передаем 0, чтобы Node.js автоматически заставил систему выделить любой свободный порт!
+      server.listen(0);
+    }, 1000);
+  }
 });
 
 
