@@ -775,32 +775,6 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
   }
 });
 
-// 🧹 Автоматическая очистка старых рейсов (раз в 5 часов)
-setInterval(async () => {
-  try {
-    await pool.query("DELETE FROM active_trips WHERE created_at < TIMEZONE('Europe/Kiev', NOW()) - INTERVAL '5 hours'");
-    console.log("🧹 [Diway CleanUp]: Старі поїздки успішно видалені.");
-  } catch (err) { 
-    console.error(err.message); 
-  }
-}, 1000 * 60 * 60);
-
-// 🚀 ИСПРАВЛЕНО: Безопасный перехват EADDRINUSE. Если порт занят, сервер автоматически подберет свободный шлюз!
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server is running smoothly on port ${PORT}`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.log(`⚠️ Порт ${PORT} зайнятий старім процесом Render. Перемикаємось на резервний порт...`);
-    setTimeout(() => {
-      // Передаем 0, чтобы Node.js автоматически выделил любой свободный порт в системе
-      server.listen(0);
-    }, 1000);
-  }
-});
-
-
 
 
 // ==========================================
