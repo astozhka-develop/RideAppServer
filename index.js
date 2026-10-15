@@ -773,6 +773,20 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
   }
 });
 
+// 🧹 АВТОМАТИЧНА ЗАЧИСТКА MVP (Фоновий процес)
+setInterval(async () => {
+  try {
+    await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
+    console.log("🧹 [Diway CleanUp]: Старі архівні поїздки успішно видалені.");
+  } catch (err) { 
+    console.error("❌ [Diway CleanUp Error]:", err.message); 
+  }
+}, 1000 * 60 * 60);
+
+// 🚀 ИСПРАВЛЕНО: Резервный динамический перехват ошибки EADDRINUSE (Порт занят)
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server is running smoothly on port ${PORT}`);
+});
 
 
 // ==========================================
