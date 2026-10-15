@@ -774,21 +774,20 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
   }
 });
 
-// 🧹 АВТОМАТИЧНА ЗАЧИСТКА MVP (Фоновий процес): Повне видалення старих рейсів з урахуванням українського часу!
+// 🧹 Очистка старых рейсов (раз в 5 часов) - ВСЕ СКОБКИ СБАЛАНСИРОВАНЫ
 setInterval(async () => {
   try {
-    // 🟢 ИСПРАВЛЕНО: Теперь NOW() принудительно переводится в Europe/Kiev перед вычитанием 5 часов!
-    await pool.query("DELETE FROM active_trips WHERE created_at < TIMEZONE('Europe/Kiev', NOW()) - INTERVAL '5 hours'");
-    console.log("🧹 [Diway CleanUp]: Старі архівні поїздки успішно видалені з бази даних Supabase.");
+    await pool.query("DELETE FROM active_trips WHERE created_at < NOW() - INTERVAL '5 hours'");
   } catch (err) { 
-    console.error("❌ [Diway CleanUp Error]: Не вдалося очистити архів таблиці:", err.message); 
+    console.error(err.message); 
   }
-}, 1000 * 60 * 60); // Перевірка щогодини
+}, 1000 * 60 * 60);
 
-// 🚀 ЗАПУСКАЕМ СЕРВЕР (КАВЫЧКИ ИСПРАВЛЕНЫ!)
+// 🚀 Запуск веб-сервера на порту Render
 app.listen(PORT, () => {
   console.log(`🚀 Server is running smoothly on port ${PORT}`);
 });
+
 
 
 
