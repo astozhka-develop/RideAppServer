@@ -215,11 +215,17 @@ app.post('/api/trips', async (req, res) => {
       return res.json({ ok: false, error: 'Доступ обмежено! Ваш аккаунт заблоковано адміністрацією.' });
     }
     
-    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress, departureTime } = req.body;
+        // 🟢 НАЧАЛО БЛОКА ИСПРАВЛЕНИЯ ЧАСОВ ВЫЕЗДА В РОУТЕ POST /api/trips
+    const { role, startLat, startLon, endLat, endLon, startAddress, endAddress } = req.body;
     
     const finalStartAddress = startAddress || "Точка на карті (Старт)";
     const finalEndAddress = endAddress || "Точка на карті (Фініш)";
-    const finalDepartureTime = departureTime || new Date().toISOString();
+    
+    // 🟢 ИСПРАВЛЕНО: Читаем выбранное водителем время в любом регистре букв, ликвидируя принудительную перезапись на текущее время!
+    const rawTime = req.body.departureTime || req.body.departure_time || req.body.time;
+    const finalDepartureTime = rawTime ? new Date(rawTime).toISOString() : new Date().toISOString();
+    // 🟢 КОНЕЦ БЛОКА ИСПРАВЛЕНИЯ ЧАСОВ ВЫЕЗДА
+
 
     // 🔥 КРИТИЧЕСКИЙ ФИКС: Перед записью нового рейса полностью зачищаем старые хвосты в Supabase!
     // Сначала удаляем все зависшие торги (ставки), привязанные к прошлым поездкам этого водителя/пассажира
