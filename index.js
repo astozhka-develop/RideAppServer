@@ -782,6 +782,55 @@ app.post('/api/payment/webhook-simulation', express.urlencoded({ extended: true 
 });
 
 // ==========================================
+// 🟢 ДОБАВЛЕНО: ПУЛЕНЕПРОБИВАЕМОЕ РУЧНОЕ СНЯТИЕ МАРШРУТА ВОДИТЕЛЕМ/ПАССАЖИРОМ
+// ==========================================
+app.delete('/api/trips/my-active', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // 1. Сначала каскадно удаляем связанные торги из ride_bids, чтобы не заблокировать внешний ключ
+    await pool.query('DELETE FROM ride_bids WHERE passenger_id = $1 OR driver_id = $1', [decoded.id]);
+    
+    // 2. Затем намертво стираем сам рейс из active_trips
+    await pool.query('DELETE FROM active_trips WHERE user_id = $1', [decoded.id]);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete active trip error:', err.message);
+    res.json({ ok: true, warned: 'Рейс вже був зачищений або відсутній: ' + err.message });
+  }
+});
+
+// ==========================================
+// 🟢 ДОБАВЛЕНО: ПОЛНОЕ УДАЛЕНИЕ АККАУНТА ПОЛЬЗОВАТЕЛЯ (ТРЕБОВАНИЕ GOOGLE PLAY)
+// ==========================================
+app.delete('/api/profile/delete-account', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ ok: false, error: 'Немає токена авторизації' });
+    
+    const token = authHeader.replace(/^Bearer\s+/, '').trim();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Каскадно вычищаем все данные о пользователе перед удалением самого профиля
+    await pool.query('DELETE FROM ride_bids WHERE passenger_id = $1 OR driver_id = $1', [decoded.id]);
+    await pool.query('DELETE FROM active_trips WHERE user_id = $1', [decoded.id]);
+    await pool.query('DELETE FROM users WHERE id = $1', [decoded.id]);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete account error:', err.message);
+    res.json({ ok: false, error: 'Помилка сервера при видаленні аккаунта: ' + err.message });
+  }
+});
+
+
+
+// ==========================================
 // 🧹 БЛОК АВТОМАТИЧЕСКОЙ ОЧИСТКИ ТАБЛИЦЫ РЕЙСОВ
 // ==========================================
 setInterval(async () => {
