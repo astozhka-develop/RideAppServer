@@ -1,55 +1,108 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="uk" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diway — Розумні попутні поїздки</title>
-    <!-- Подключение Tailwind CSS -->
+    <title>Diway — Розумні та вигідні попутні поїздки</title>
+    <!-- Tailwind CSS -->
     <script src="https://tailwindcss.com"></script>
+    <!-- Google Fonts (Inter) -->
+    <link href="https://googleapis.com" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .neon-glow { box-shadow: 0 0 40px -10px rgba(59, 130, 246, 0.3); }
+    </style>
 </head>
-<body class="bg-slate-50 text-gray-800 font-sans">
+<body class="bg-[#0B0F19] text-slate-200 antialiased overflow-x-hidden">
 
-    <!-- Головний екран (Hero Section) -->
-    <header class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white py-20 px-4 text-center">
+    <!-- Фоновые технологичные эффекты (Неоновые сферы) -->
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] pointer-events-none opacity-30 blur-[120px] overflow-hidden">
+        <div class="absolute top-[-10%] left-[20%] w-[400px] h-[400px] rounded-full bg-blue-600"></div>
+        <div class="absolute top-[10%] right-[20%] w-[350px] h-[350px] rounded-full bg-indigo-600"></div>
+    </div>
+
+    <!-- Главный экран (Hero Section) -->
+    <header class="relative min-h-[85vh] flex flex-col justify-center items-center px-4 pt-20 pb-12 text-center z-10">
         <div class="max-w-4xl mx-auto">
-            <h1 class="text-4xl md:text-6xl font-extrabold mb-4 tracking-tight">DIWAY</h1>
-            <p class="text-xl md:text-2xl mb-8 opacity-90">Додаток для розумних попутних поїздок. Пасажир пропонує ціну — водій обирає!</p>
-            <div class="flex flex-col sm:flex-row justify-center gap-4">
-                <a href="#download" class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg transition transform hover:-translate-y-0.5 text-lg">
+            <!-- Технологичный бейдж -->
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold mb-6 tracking-wide uppercase">
+                <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span> Нове покоління міської логістики
+            </div>
+            
+            <h1 class="text-5xl md:text-8xl font-black mb-6 tracking-tight text-white bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-blue-500">
+                DIWAY
+            </h1>
+            
+            <p class="text-lg md:text-2xl text-slate-400 mb-10 max-w-2xl mx-auto font-light leading-relaxed">
+                Інноваційний сервіс попутних поїздок в Україні. <br class="hidden md:inline">
+                <span class="text-blue-400 font-medium">Пасажир пропонує ціну — водій обирає найкращу ставку.</span>
+            </p>
+            
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+                <a href="#download" class="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-10 rounded-xl shadow-lg shadow-blue-600/20 transition duration-300 transform hover:-translate-y-0.5 text-center text-lg tracking-wide">
                     Завантажити додаток (.APK)
                 </a>
             </div>
         </div>
     </header>
 
-    <!-- Блок переваг -->
-    <main class="max-w-5xl mx-auto py-16 px-4">
+    <!-- Блок "Як це працює" -->
+    <section class="py-12 px-4 relative z-10 max-w-5xl mx-auto text-center border-t border-slate-800/60">
+        <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-12">Три простих кроки до поїздки</h2>
+        <div class="grid sm:grid-cols-3 gap-8">
+            <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-xl">
+                <div class="w-12 h-12 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold mx-auto mb-4 text-xl">1</div>
+                <h4 class="text-white font-semibold mb-2">Вкажіть маршрут</h4>
+                <p class="text-sm text-slate-400">Поставте точні точки старту та фінішу прямо на інтерактивній карті додатка.</p>
+            </div>
+            <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-xl">
+                <div class="w-12 h-12 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold mx-auto mb-4 text-xl">2</div>
+                <h4 class="text-white font-semibold mb-2">Запропонуйте ціну</h4>
+                <p class="text-sm text-slate-400">Пасажир сам визначає бюджет поїздки та вказує кількість попутників.</p>
+            </div>
+            <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-xl">
+                <div class="w-12 h-12 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold mx-auto mb-4 text-xl">3</div>
+                <h4 class="text-white font-semibold mb-2">Їдьте з комфортом</h4>
+                <p class="text-sm text-slate-400">Водій миттєво бачить замовлення на радарі та приймає торги в реальному часі.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Блок преимуществ (Пассажирам / Водителям) -->
+    <main class="max-w-5xl mx-auto py-16 px-4 relative z-10">
         <div class="grid md:grid-cols-2 gap-8">
-            <!-- Пасажирам -->
-            <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-                <div class="text-3xl mb-4">👤</div>
-                <h3 class="text-2xl font-bold mb-3 text-blue-900">Пасажирам</h3>
-                <p class="text-gray-600 mb-4">Економте на поїздках! Самі вказуйте точні координати на карті, кількість людей та суму, яку готові заплатити за проїзд.</p>
-                <span class="text-sm font-semibold text-blue-600 bg-blue-50 py-1 px-3 rounded-full">До 3-х спроб ставок</span>
+            <!-- Пассажирам -->
+            <div class="neon-glow bg-slate-900/40 backdrop-blur-md p-8 rounded-2xl border border-slate-800 hover:border-blue-500/30 transition duration-300 group">
+                <div class="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-2xl mb-6 group-hover:bg-blue-600/20 transition duration-300">👤</div>
+                <h3 class="text-2xl font-bold mb-4 text-white tracking-tight">Пасажирам</h3>
+                <p class="text-slate-400 leading-relaxed mb-6 font-light">Повний контроль над вашими витратами на дорогу. Більше ніяких залізничних тарифів чи націнок у годину пік. Самі призначайте суму, вибирайте водія та економте кошти, подорожуючи з комфортом.</p>
+                <div class="inline-flex text-xs font-semibold tracking-wider text-blue-400 uppercase bg-blue-500/10 border border-blue-500/20 py-1.5 px-3 rounded-full">
+                    До 3-х спроб торгів за рейс
+                </div>
             </div>
 
-            <!-- Водіям -->
-            <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-                <div class="text-3xl mb-4">🚗</div>
-                <h3 class="text-2xl font-bold mb-3 text-indigo-900">Водіям</h3>
-                <p class="text-gray-600 mb-4">Працюйте без прихованих комісій агрегаторів! Бачте активні замовлення пасажирів на інтерактивній карті та приймайте вигідні ставки.</p>
-                <span class="text-sm font-semibold text-indigo-600 bg-indigo-50 py-1 px-3 rounded-full">Безлімітний доступ</span>
+            <!-- Водителям -->
+            <div class="neon-glow bg-slate-900/40 backdrop-blur-md p-8 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition duration-300 group">
+                <div class="w-12 h-12 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-2xl mb-6 group-hover:bg-indigo-600/20 transition duration-300">🚗</div>
+                <h3 class="text-2xl font-bold mb-4 text-white tracking-tight">Водіям</h3>
+                <p class="text-slate-400 leading-relaxed mb-6 font-light">Заробляйте на щоденних поїздках без прихованих комісій агрегаторів та диспетчерів таксі. Розумний коридорний радар автоматично підбирає пасажирів строго по траєкторії вашої адреси виїзду.</p>
+                <div class="inline-flex text-xs font-semibold tracking-wider text-indigo-400 uppercase bg-indigo-500/10 border border-indigo-500/20 py-1.5 px-3 rounded-full">
+                    Прямий безлімітний доступ
+                </div>
             </div>
         </div>
     </main>
 
-    <!-- Підвал сайту -->
-    <footer id="download" class="bg-slate-900 text-white/80 py-12 px-4 text-center border-t border-slate-800">
-        <p class="mb-4 font-medium text-white">&copy; 2026 Diway. Усі права захищені.</p>
-        <div class="flex justify-center gap-6 text-sm">
-            <a href="/privacy-policy" class="hover:text-white underline">Політика конфіденційності</a>
-            <a href="/terms" class="hover:text-white underline">Угода користувача</a>
-            <a href="mailto:support@diway.com.ua" class="hover:text-white underline">Підтримка</a>
+    <!-- Подвал сайта -->
+    <footer id="download" class="bg-[#070a12] text-slate-500 py-16 px-4 text-center border-t border-slate-900 relative z-10">
+        <div class="max-w-4xl mx-auto">
+            <p class="text-white font-medium mb-6 tracking-wide text-lg">DIWAY — Поїздки за твоїми правилами</p>
+            <div class="flex flex-wrap justify-center gap-x-8 gap-y-4 text-sm font-medium mb-8">
+                <a href="/privacy-policy" class="hover:text-blue-400 transition duration-200 underline decoration-slate-800 hover:decoration-blue-400">Політика конфіденційності</a>
+                <a href="/terms" class="hover:text-blue-400 transition duration-200 underline decoration-slate-800 hover:decoration-blue-400">Угода користувача</a>
+                <a href="mailto:support@diway.com.ua" class="hover:text-blue-400 transition duration-200 underline decoration-slate-800 hover:decoration-blue-400">Служба підтримки</a>
+            </div>
+            <p class="text-xs text-slate-600">&copy; 2026 Diway. Усі права захищені законодавством України.</p>
         </div>
     </footer>
 
