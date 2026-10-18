@@ -11,7 +11,9 @@ app.use(bodyParser.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Раздача папки public для сайта-лендинга
-app.use(express.static(path.join(__dirname, 'public')));
+// 🟢 ИСПРАВЛЕНО: Включен принудительный парсинг расширений файлов (.html, .css) для папки public
+app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html', 'htm'] }));
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 const PORT = parseInt(process.env.PORT, 10) || 10000;
