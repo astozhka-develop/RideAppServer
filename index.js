@@ -843,12 +843,13 @@ setInterval(async () => {
 }, 1000 * 60 * 60);
 
 // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Прямые роуты для открытия юридических документов без ошибок Cannot GET
+// 🟢 ИСПРАВЛЕНО НАДЁЖНО: Прямая раздача файлов через относительный роутинг Express
 app.get('/terms', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+  res.redirect('/terms.html');
 });
 
 app.get('/privacy-policy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+  res.redirect('/privacy-policy.html');
 });
 
 
