@@ -842,6 +842,16 @@ setInterval(async () => {
   }
 }, 1000 * 60 * 60);
 
+// 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Прямые роуты для открытия юридических документов без ошибок Cannot GET
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+});
+
+app.get('/privacy-policy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+});
+
+
 // ==========================================
 // 🚀 ОДНОКРАТНЫЙ ПУЛЕНЕПРОБИВАЕМЫЙ ЗАПУСК СЕРВЕРА
 // ==========================================
