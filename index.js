@@ -458,7 +458,15 @@ app.get('/astaff', (req, res) => {
   html += '  <input type="text" id="searchPhoneInput" oninput="filterUsersByPhone()" placeholder=\'Введіть номер (наприклад, 380...)\' style="height: 48px;">';
   html += '</div>';
 
-  html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
+    // 🟢 ИСПРАВЛЕНО: Правильно закрытые теги возвращают списки водителей и пассажиров на экран!
+  html += '<h3>👥 Пасажири</h3>';
+  html += '<div id="passengersList" style="margin-bottom: 30px;"><div class="no-data">Завантаження пасажирів...</div></div>';
+  
+  html += '<h3>🚗 Водії</h3>';
+  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div>';
+  
+  html += '</div>'; // Закрываем главный .dashboard-container
+
 
   
   html += '<script>';
