@@ -455,7 +455,7 @@ app.get('/astaff', (req, res) => {
   // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Инпут для живого поиска по номеру телефона
   html += '<div class="admin-section" style="margin-bottom: 20px;">';
   html += '  <label style="margin-bottom: 8px; font-weight: bold; color: #757575;">🔍 Швидкий пошук за номером телефону</label>';
-  html += '  <input type="text" id="searchPhoneInput" oninput="filterUsersByPhone()" placeholder="Введіть номер або частину номера (наприклад, 380...)" style="height: 48px;">';
+  html += '  <input type="text" id="searchPhoneInput" oninput="filterUsersByPhone()" placeholder=\'Введіть номер (наприклад, 380...)\' style="height: 48px;">';
   html += '</div>';
 
   html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
@@ -567,19 +567,24 @@ app.get('/astaff', (req, res) => {
   html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
   html += '}';
 
-  // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Функция живого поиска по номеру телефона
+   // 🔥 ИСПРАВЛЕНО: Безопасный поиск по номерам телефонов, защищенный от конфликтов экранирования строк Node.js
   html += 'function filterUsersByPhone() {';
-  html += '  const searchTxt = document.getElementById("searchPhoneInput").value.trim().toLowerCase();';
-  html += '  const cards = document.querySelectorAll(".driver-card");';
-  html += '  cards.forEach(card => {';
-  html += '    const phoneParagraph = card.querySelector("p");';
-  html += '    if (phoneParagraph) {';
-  html += '      const phoneText = phoneParagraph.innerText.toLowerCase();';
-  html += '      if (phoneText.includes(searchTxt)) { card.style.display = "flex"; }';
-  html += '      else { card.style.display = "none"; }';
+  html += '  var input = document.getElementById("searchPhoneInput");';
+  html += '  if (!input) return;';
+  html += '  var target = input.value.trim().toLowerCase();';
+  html += '  var cards = document.getElementsByClassName("driver-card");';
+  html += '  for (var i = 0; i < cards.length; i++) {';
+  html += '    var card = cards[i];';
+  // Ищем любой блок с текстом внутри карточки пользователя
+  html += '    var cardText = card.innerText || card.textContent || "";';
+  html += '    if (cardText.toLowerCase().indexOf(target) > -1) {';
+  html += '      card.style.setProperty("display", "flex", "important");';
+  html += '    } else {';
+  html += '      card.style.setProperty("display", "none", "important");';
   html += '    }';
-  html += '  });';
+  html += '  }';
   html += '}';
+
 
   
   html += '</script></body></html>';
