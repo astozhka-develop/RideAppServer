@@ -451,8 +451,15 @@ app.get('/astaff', (req, res) => {
   html += '</div></div>';
 
   html += '<h3>📋 Усі зареєстровані користувачі та керування доступом</h3>';
+  
+  // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Инпут для живого поиска по номеру телефона
+  html += '<div class="admin-section" style="margin-bottom: 20px;">';
+  html += '  <label style="margin-bottom: 8px; font-weight: bold; color: #757575;">🔍 Швидкий пошук за номером телефону</label>';
+  html += '  <input type="text" id="searchPhoneInput" oninput="filterUsersByPhone()" placeholder="Введіть номер або частину номера (наприклад, 380...)" style="height: 48px;">';
+  html += '</div>';
+
   html += '<div id="passengersList"><div class="no-data">Завантаження пасажирів...</div></div></div>';
-  html += '<div id="driversList"><div class="no-data">Завантаження водіїв...</div></div></div>';
+
   
   html += '<script>';
   html += 'let adminToken = "";';
@@ -559,6 +566,21 @@ app.get('/astaff', (req, res) => {
   html += '    else { alert("❌ Помилка: " + data.error); }';
   html += '  } catch(err) { alert("Помилка з\'єднання з сервером"); }';
   html += '}';
+
+  // 🔥 ДОБАВЛЕНО ТОЧЕЧНО: Функция живого поиска по номеру телефона
+  html += 'function filterUsersByPhone() {';
+  html += '  const searchTxt = document.getElementById("searchPhoneInput").value.trim().toLowerCase();';
+  html += '  const cards = document.querySelectorAll(".driver-card");';
+  html += '  cards.forEach(card => {';
+  html += '    const phoneParagraph = card.querySelector("p");';
+  html += '    if (phoneParagraph) {';
+  html += '      const phoneText = phoneParagraph.innerText.toLowerCase();';
+  html += '      if (phoneText.includes(searchTxt)) { card.style.display = "flex"; }';
+  html += '      else { card.style.display = "none"; }';
+  html += '    }';
+  html += '  });';
+  html += '}';
+
   
   html += '</script></body></html>';
   res.send(html);
