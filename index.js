@@ -114,6 +114,9 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// ==========================================
+// 🔐 ИСПРАВЛЕНО: Роут профиля с жестким контролем триал-периода (Без бесконечных обновлений!)
+// ==========================================
 app.get('/api/profile', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -135,27 +138,45 @@ app.get('/api/profile', async (req, res) => {
     const user = result.rows[0];
     
     const now = new Date();
-    const deviceRegisteredAt = user.first_registered_at ? new Date(user.first_registered_at) : new Date();
     const subscriptionExpiresAt = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
     
     let daysLeft = 0;
     let isBlocked = false;
-    const trialPeriodMs = 30 * 24 * 60 * 60 * 1000; 
-    const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
-    
-    if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
-      const msLeft = subscriptionExpiresAt - now;
-      daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
-      isBlocked = false;
-    } else if (now < trialExpiryDate) {
-      const msLeft = trialExpiryDate - now;
-      daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
-      isBlocked = false;
+
+    // 🟢 КРИТИЧЕСКИЙ ФИКС: Если устройство найдено в базе — берем его оригинальную дату, если нет — триал равен 0 дней!
+    if (user.first_registered_at) {
+      const deviceRegisteredAt = new Date(user.first_registered_at);
+      const trialPeriodMs = 30 * 24 * 60 * 60 * 1000; // 30 дней триала
+      const trialExpiryDate = new Date(deviceRegisteredAt.getTime() + trialPeriodMs);
+
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        // 1. Если есть активная оплаченная подписка Monobank
+        const msLeft = subscriptionExpiresAt - now;
+        daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
+        isBlocked = false;
+      } else if (now < trialExpiryDate) {
+        // 2. Если оплата кончилась, но 30-дневный триал устройства еще тикает
+        const msLeft = trialExpiryDate - now;
+        daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
+        isBlocked = false;
+      } else {
+        // 3. Срок триала и подписки полностью истек — ЖЕСТКИЙ БЛОК!
+        daysLeft = 0;
+        isBlocked = true;
+      }
     } else {
-      daysLeft = 0;
-      isBlocked = true;
+      // Защита: если девайс почему-то не привязался, не даем бесконечный триал, а просим оплату
+      if (subscriptionExpiresAt && now < subscriptionExpiresAt) {
+        const msLeft = subscriptionExpiresAt - now;
+        daysLeft = Math.ceil(msLeft / (1000 * 24 * 60 * 60));
+        isBlocked = false;
+      } else {
+        daysLeft = 0;
+        isBlocked = true;
+      }
     }
 
+    // Дополнительная административная блокировка из панели /astaff
     if (user.is_verified === false || user.is_verified === 0 || user.is_verified === 'false') {
       daysLeft = 0;
       isBlocked = true;
@@ -179,6 +200,7 @@ app.get('/api/profile', async (req, res) => {
     res.json({ ok: false, error: 'Помилка авторизації: ' + err.message });
   }
 });
+
 
 app.put('/api/profile', async (req, res) => {
   try {
