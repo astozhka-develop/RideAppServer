@@ -1,53 +1,69 @@
-app.get('/privacy-policy', (req, res) => {
-  let html = '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">';
-  html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
-  html += '<title>Політика конфіденційності — DIWAY</title>';
-  html += '<link rel="icon" type="image/png" href="/favicon.png">';
-  html += '<script src="https://tailwindcss.com"></script></head>';
-  html += '<body class="bg-[#0B0F19] text-slate-200 antialiased"><div class="max-w-3xl mx-auto my-12 p-8 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl">';
-  
-  html += '<h1 class="text-3xl font-extrabold text-white mb-2">ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</h1>';
-  html += '<p class="text-lg font-medium text-blue-400 mb-6">мобільного додатка та вебсайту DIWAY</p>';
-  html += '<p class="text-sm text-slate-500 mb-8">Останнє оновлення: Листопад 2026 року</p>';
-  
-  html += '<section class="mb-6"><h2 class="text-xl font-bold text-blue-400 mb-3">1. Загальні положення та Контролер даних</h2>';
-  html += '<p class="text-slate-400 leading-relaxed mb-3">Ця Політика конфіденційності описує, як Фізична особа-підприємець [Прізвище, Ім\'я, По батькові] (РНОКПП [Ваш ІПН], надалі — «Адміністрація» або «Ми») збирає, використовує, зберігає та захищає персональні дані користувачів мобільного додатка <strong>DIWAY</strong> та вебсайту <strong>diway.com.ua</strong> (надалі — «Сервіс»).</p>';
-  html += '<p class="text-slate-400 leading-relaxed">Використовуючи Сервіс, ви надаєте згоду на обробку ваших даних відповідно до Закону України «Про захист персональних даних» та Загального регламенту про захист даних ЄС (GDPR).</p></section>';
-  
-  html += '<section class="mb-6"><h2 class="text-xl font-bold text-blue-400 mb-3">2. Які дані ми збираємо та з якою метою</h2>';
-  html += '<ul class="list-disc list-inside space-y-3 text-slate-400 leading-relaxed">';
-  html += '<li><strong class="text-slate-200">Дані про геолокацію (GPS, включно з фоновим режимом):</strong> Додаток збирає точні координати вашого пристрою в активному та фоновому режимі виключно під час активного пошуку попутників або виконання поїздки (роботи «коридорного радара»). Це необхідно для відображення доступних водіїв на мапі пасажира, побудови маршрутів та розрахунку відстані. Збір фонової геолокації припиняється одразу після завершення поїздки або вимкнення режиму пошуку.</li>';
-  html += '<li><strong class="text-slate-200">Ідентифікатор пристрою (Device ID):</strong> Ми фіксуємо унікальний технічний ідентифікатор смартфона з метою надання та верифікації безкоштовного 30-денного ознайомчого періоду, а також для запобігання шахрайству та повторним реєстраціям.</li>';
-  html += '<li><strong class="text-slate-200">Дані профілю користувача:</strong> Під час реєстрації збираються ім\'я, номер телефону, обрана роль (Водій або Пасажир), а для водіїв додатково — марка, модель, колір та державний номерний знак автомобіля. Номер телефону водія відкривається пасажиру виключно після взаємного підтвердження ставки на поїздку.</li>';
-  html += '<li><strong class="text-slate-200">Платіжна інформація:</strong> Під час оплати Сервісного абонемента (150 грн) обробка даних банківських карток здійснюється безпосередньо сертифікованим платіжним шлюзом plata by mono (АТ «УНІВЕРСАЛ БАНК»). Сервіс DIWAY не збирає та не зберігає реквізити ваших банківських карток, отримуючи лише статус оплати та технічний токен для автопродовження підписки (за вашою згодою).</li>';
-  html += '</ul></section>';
-  
-  html += '<section class="mb-6"><h2 class="text-xl font-bold text-blue-400 mb-3">3. Передача даних третім особам (постачальникам послуг)</h2>';
-  html += '<p class="text-slate-400 leading-relaxed mb-3">Ми не продаємо та не передаємо ваші персональні дані стороннім рекламним чи маркетинговим компаніям. Для забезпечення технічної роботи Сервісу дані можуть оброблятися обмеженим колом довірених технологічних партнерів:</p>';
-  html += '<ul class="list-disc list-inside space-y-2 text-slate-400 leading-relaxed">';
-  html += '<li><strong class="text-slate-200">Supabase</strong> — захищена хмарна інфраструктура для зберігання баз даних та аутентифікації;</li>';
-  html += '<li><strong class="text-slate-200">АТ «УНІВЕРСАЛ БАНК» (plata by mono)</strong> — проведення безготівкових платежів;</li>';
-  html += '<li><strong class="text-slate-200">Картографічні сервіси (Google Maps / навігаційні API)</strong> — побудова маршрутів та відображення мапи;</li>';
-  html += '<li><strong class="text-slate-200">Державні органи</strong> — виключно у випадках, прямо передбачених чинним законодавством.</li>';
-  html += '</ul></section>';
-  
-  html += '<section class="mb-6"><h2 class="text-xl font-bold text-blue-400 mb-3">4. Безпека та строки зберігання даних</h2>';
-  html += '<p class="text-slate-400 leading-relaxed">Усі дані передаються виключно в зашифрованому вигляді за протоколом HTTPS (TLS). Паролі користувачів проходять криптографічне хешування перед збереженням у базі даних. Персональні дані зберігаються протягом усього часу існування облікового запису користувача.</p></section>';
-  
-  html += '<section class="mb-6"><h2 class="text-xl font-bold text-blue-400 mb-3">5. Видалення облікового запису та права користувачів</h2>';
-  html += '<p class="text-slate-400 leading-relaxed mb-3">Ви маєте право на доступ, виправлення або повне видалення своїх персональних даних:</p>';
-  html += '<ul class="list-disc list-inside space-y-2 text-slate-400 leading-relaxed">';
-  html += '<li><strong class="text-slate-200">У додатку:</strong> Ви можете самостійно видалити свій обліковий запис у розділі «Профіль» &rarr; «Налаштування» &rarr; «Видалити акаунт».</li>';
-  html += '<li><strong class="text-slate-200">Через вебзапит:</strong> Ви також можете надіслати запит на повне видалення облікового запису та історії поїздок на електронну пошту <a href="mailto:Linkpl@ukr.net" class="text-blue-500 underline">Linkpl@ukr.net</a> із темою листа «Видалити дані DIWAY».</li>';
-  html += '<li><strong class="text-slate-200">Строк видалення:</strong> Профіль, історія поїздок, ставок та геолокація видаляються безповоротно протягом 7 робочих днів з моменту звернення. Винятком є дані про фінансові транзакції (квитанції), які ми зобов\'язані зберігати протягом 3 років відповідно до вимог податкового законодавства України.</li>';
-  html += '</ul></section>';
-  
-  html += '<section class="border-t border-slate-800 pt-6 mt-8"><h2 class="text-lg font-bold text-blue-400 mb-3">6. Контакти Служби підтримки та Контролера даних</h2>';
-  html += '<p class="text-slate-400 mb-1">ФОП [Прізвище, Ім\'я, По батькові]</p>';
-  html += '<p class="text-slate-400 mb-1">РНОКПП: [Ваш ІПН]</p>';
-  html += '<p class="text-slate-400 mb-1">Електронна пошта: <a href="mailto:Linkpl@ukr.net" class="text-blue-500 underline">Linkpl@ukr.net</a></p>';
-  html += '<p class="text-slate-400">Офіційний вебсайт: <a href="https://diway.com.ua" class="text-blue-500 underline">https://diway.com.ua</a></p></section>';
-  
-  html += '</div></body></html>';
-  res.send(html);
-});
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Політика конфіденційності — DIWAY</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-[#0B0F19] text-slate-200 antialiased">
+  <div class="max-w-3xl mx-auto my-12 p-8 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl">
+    
+    <h1 class="text-3xl font-extrabold text-white mb-2">ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</h1>
+    <p class="text-lg font-medium text-blue-400 mb-6">мобільного додатка та вебсайту DIWAY</p>
+    <p class="text-sm text-slate-500 mb-8">Останнє оновлення: Листопад 2026 року</p>
+    
+    <section class="mb-6">
+      <h2 class="text-xl font-bold text-blue-400 mb-3">1. Загальні положення та Контролер даних</h2>
+      <p class="text-slate-400 leading-relaxed mb-3">Ця Політика конфіденційності описує, як Фізична особа-підприємець [Прізвище, Ім'я, По батькові] (РНОКПП [Ваш ІПН], надалі — «Адміністрація» або «Ми») збирає, використовує, зберігає та захищає персональні дані користувачів мобільного додатка <strong>DIWAY</strong> та вебсайту <strong>diway.com.ua</strong> (надалі — «Сервіс»).</p>
+      <p class="text-slate-400 leading-relaxed">Використовуючи Сервіс, ви надаєте згоду на обробку ваших даних відповідно до Закону України «Про захист персональних даних» та Загального регламенту про захист даних ЄС (GDPR).</p>
+    </section>
+    
+    <section class="mb-6">
+      <h2 class="text-xl font-bold text-blue-400 mb-3">2. Які дані ми збираємо та з якою метою</h2>
+      <ul class="list-disc list-inside space-y-3 text-slate-400 leading-relaxed">
+        <li><strong class="text-slate-200">Дані про геолокацію (GPS, включно з фоновим режимом):</strong> Додаток збирає точні координати вашого пристрою в активному та фоновому режимі виключно під час активного пошуку попутників або виконання поїздки (роботи «коридорного радара»). Це необхідно для відображення доступних водіїв на мапі пасажира, побудови маршрутів та розрахунку відстані. Збір фонової геолокації припиняється одразу після завершення поїздки або вимкнення режиму пошуку.</li>
+        <li><strong class="text-slate-200">Ідентифікатор пристрою (Device ID):</strong> Ми фіксуємо унікальний технічний ідентифікатор смартфона з метою надання та верифікації безкоштовного 30-денного ознайомчого періоду, а також для запобігання шахрайству та повторним реєстраціям.</li>
+        <li><strong class="text-slate-200">Дані профілю користувача:</strong> Під час реєстрації збираються ім'я, номер телефону, обрана роль (Водій або Пасажир), а для водіїв додатково — марка, модель, колір та державний номерний знак автомобіля. Номер телефону водія відкривається пасажиру виключно після взаємного підтвердження ставки на поїздку.</li>
+        <li><strong class="text-slate-200">Платіжна інформація:</strong> Під час оплати Сервісного абонемента (150 грн) обробка даних банківських карток здійснюється безпосередньо сертифікованим платіжним шлюзом plata by mono (АТ «УНІВЕРСАЛ БАНК»). Сервіс DIWAY не збирає та не зберігає реквізити ваших банківських карток, отримуючи лише статус оплати та технічний токен для автопродовження підписки (за вашою згодою).</li>
+      </ul>
+    </section>
+    
+    <section class="mb-6">
+      <h2 class="text-xl font-bold text-blue-400 mb-3">3. Передача даних третім особам (постачальникам послуг)</h2>
+      <p class="text-slate-400 leading-relaxed mb-3">Ми не продаємо та не передаємо ваші персональні дані стороннім рекламним чи маркетинговим компаніям. Для забезпечення технічної роботи Сервісу дані можуть оброблятися обмеженим колом довірених технологічних партнерів:</p>
+      <ul class="list-disc list-inside space-y-2 text-slate-400 leading-relaxed">
+        <li><strong class="text-slate-200">Supabase</strong> — захищена хмарна інфраструктура для зберігання баз даних та аутентифікації;</li>
+        <li><strong class="text-slate-200">АТ «УНІВЕРСАЛ БАНК» (plata by mono)</strong> — проведення безготівкових платежів;</li>
+        <li><strong class="text-slate-200">Картографічні сервіси (Google Maps / навігаційні API)</strong> — побудова маршрутів та відображення мапи;</li>
+        <li><strong class="text-slate-200">Державні органи</strong> — виключно у випадках, прямо передбачених чинним законодавством.</li>
+      </ul>
+    </section>
+    
+    <section class="mb-6">
+      <h2 class="text-xl font-bold text-blue-400 mb-3">4. Безпека та строки зберігання даних</h2>
+      <p class="text-slate-400 leading-relaxed">Усі дані передаються виключно в зашифрованому вигляді за протоколом HTTPS (TLS). Паролі користувачів проходять криптографічне хешування перед збереженням у базі даних. Персональні дані зберігаються протягом усього часу існування облікового запису користувача.</p>
+    </section>
+    
+    <section class="mb-6">
+      <h2 class="text-xl font-bold text-blue-400 mb-3">5. Видалення облікового запису та права користувачів</h2>
+      <p class="text-slate-400 leading-relaxed mb-3">Ви маєте право на доступ, виправлення або повне видалення своїх персональних даних:</p>
+      <ul class="list-disc list-inside space-y-2 text-slate-400 leading-relaxed">
+        <li><strong class="text-slate-200">У додатку:</strong> Ви можете самостійно видалити свій обліковий запис у розділі «Профіль» &rarr; «Налаштування» &rarr; «Видалити акаунт».</li>
+        <li><strong class="text-slate-200">Через вебзапит:</strong> Ви також можете надіслати запит на повне видалення облікового запису та історії поїздок на електронну пошту <a href="mailto:Linkpl@ukr.net" class="text-blue-500 underline">Linkpl@ukr.net</a> із темою листа «Видалення даних DIWAY».</li>
+        <li><strong class="text-slate-200">Строк видалення:</strong> Профіль, історія поїздок, ставок та геолокація видаляються безповоротно протягом 7 робочих днів з моменту звернення. Винятком є дані про фінансові транзакції (квитанції), які ми зобов'язані зберігати протягом 3 років відповідно до вимог податкового законодавства України.</li>
+      </ul>
+    </section>
+    
+    <section class="border-t border-slate-800 pt-6 mt-8">
+      <h2 class="text-lg font-bold text-blue-400 mb-3">6. Контакти Служби підтримки та Контролера даних</h2>
+      <p class="text-slate-400 mb-1">ФОП [Прізвище, Ім'я, По батькові]</p>
+      <p class="text-slate-400 mb-1">РНОКПП: [Ваш ІПН]</p>
+      <p class="text-slate-400 mb-1">Електронна пошта: <a href="mailto:Linkpl@ukr.net" class="text-blue-500 underline">Linkpl@ukr.net</a></p>
+      <p class="text-slate-400">Офіційний вебсайт: <a href="https://diway.com.ua" class="text-blue-500 underline">https://diway.com.ua</a></p>
+    </section>
+    
+  </div>
+</body>
+</html>
